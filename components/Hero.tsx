@@ -13,6 +13,7 @@ const PortfolioParticles: React.FC = () => {
 
     let animationFrameId: number;
     let particles: Array<{x: number, y: number, vx: number, vy: number, size: number, color: string, alpha: number}> = [];
+    let mouse = { x: -1000, y: -1000 };
 
     const resize = () => {
       canvas.width = canvas.offsetWidth;
@@ -20,11 +21,11 @@ const PortfolioParticles: React.FC = () => {
       initParticles();
     };
 
-    const colors = ['#a855f7', '#22c55e', '#3b82f6']; // Purple, Green, Blue
+    const colors = ['#a855f7', '#22c55e', '#3b82f6', '#ec4899']; // Added Pink
 
     const initParticles = () => {
       particles = [];
-      const count = 35; 
+      const count = 40; 
       for (let i = 0; i < count; i++) {
         particles.push({
           x: Math.random() * canvas.width,
@@ -33,7 +34,7 @@ const PortfolioParticles: React.FC = () => {
           vy: (Math.random() - 0.5) * 0.5,
           size: Math.random() * 2 + 0.5,
           color: colors[Math.floor(Math.random() * colors.length)],
-          alpha: Math.random() * 0.5 + 0.2
+          alpha: Math.random() * 0.6 + 0.2
         });
       }
     };
@@ -65,6 +66,21 @@ const PortfolioParticles: React.FC = () => {
 
       // Draw Particles
       particles.forEach(p => {
+        // Mouse Interaction
+        const rect = canvas.getBoundingClientRect();
+        const localMouseX = mouse.x - rect.left;
+        const localMouseY = mouse.y - rect.top;
+        
+        const dx = localMouseX - p.x;
+        const dy = localMouseY - p.y;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+        
+        if (dist < 80) {
+            const force = (80 - dist) / 80;
+            p.vx -= (dx / dist) * force * 0.8;
+            p.vy -= (dy / dist) * force * 0.8;
+        }
+
         p.x += p.vx;
         p.y += p.vy;
 
@@ -87,10 +103,18 @@ const PortfolioParticles: React.FC = () => {
 
     resize();
     draw();
+    
+    const handleMouseMove = (e: MouseEvent) => {
+        mouse.x = e.clientX;
+        mouse.y = e.clientY;
+    };
+    
     window.addEventListener('resize', resize);
+    window.addEventListener('mousemove', handleMouseMove);
 
     return () => {
       window.removeEventListener('resize', resize);
+      window.removeEventListener('mousemove', handleMouseMove);
       cancelAnimationFrame(animationFrameId);
     };
   }, []);
