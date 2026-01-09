@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import MatrixLoader from './components/MatrixLoader';
 import CustomCursor from './components/CustomCursor';
@@ -6,81 +6,42 @@ import Hero from './components/Hero';
 import Marquee from './components/Marquee';
 import ProjectCard from './components/ProjectCard';
 import NoiseOverlay from './components/NoiseOverlay';
-import { Project, Experience, Award } from './types';
-import { Github, Linkedin, Mail, Twitter } from 'lucide-react';
-
-const projects: Project[] = [
-  {
-    id: 1,
-    title: "Easy Recycle",
-    category: "UI/UX Design",
-    year: "2024",
-    description: "A sustainable lifestyle application focusing on recycling habits and community engagement.",
-    image: "https://picsum.photos/1200/800?random=1"
-  },
-  {
-    id: 2,
-    title: "Yongling Band",
-    category: "Branding",
-    year: "2023",
-    description: "Cultural heritage brand design for a traditional music ensemble with modern aesthetics.",
-    image: "https://picsum.photos/1200/800?random=2"
-  },
-  {
-    id: 3,
-    title: "Martial Arts",
-    category: "Interactive",
-    year: "2024",
-    description: "An immersive HTML5 promotional campaign for a mobile game launch.",
-    image: "https://picsum.photos/1200/800?random=3"
-  },
-  {
-    id: 4,
-    title: "Lugu Sauce",
-    category: "Packaging",
-    year: "2022",
-    description: "Premium packaging design for traditional agricultural products.",
-    image: "https://picsum.photos/1200/800?random=4"
-  }
-];
-
-const experience: Experience[] = [
-  {
-    id: 1,
-    role: "Project Assistant",
-    company: "National Social Science Fund",
-    period: "2024.01 - 2024.02",
-    description: "Assisted in data visualization and UI framework for cultural heritage research."
-  },
-  {
-    id: 2,
-    role: "UI Design Intern",
-    company: "TechFlow Innovations",
-    period: "2023.06 - 2023.12",
-    description: "Led the redesign of the mobile component library and user dashboard."
-  },
-  {
-    id: 3,
-    role: "Visual Designer",
-    company: "Creative Studio X",
-    period: "2022.05 - 2023.01",
-    description: "Produced marketing assets and brand identity systems for 10+ startups."
-  }
-];
-
-const awards: Award[] = [
-  { id: 1, title: "National Advertising Art Design Competition", rank: "First Prize", year: "2023" },
-  { id: 2, title: "Blue Bridge Cup Design Contest", rank: "Second Prize", year: "2022" },
-  { id: 3, title: "China Packaging Creative Design", rank: "Third Prize", year: "2022" }
-];
+import AdminPortal from './components/AdminPortal';
+import { getPortfolioData, AppData } from './utils/dataManager';
+import { Github, Linkedin, Mail, Twitter, Lock } from 'lucide-react';
 
 const App: React.FC = () => {
   const [loading, setLoading] = useState(true);
+  const [portfolioData, setPortfolioData] = useState<AppData | null>(null);
+  const [showAdmin, setShowAdmin] = useState(false);
+
+  useEffect(() => {
+    // Load data on mount
+    const data = getPortfolioData();
+    setPortfolioData(data);
+  }, []);
+
+  const handleDataUpdate = (newData: AppData) => {
+    setPortfolioData(newData);
+  };
+
+  if (!portfolioData) return null;
 
   return (
     <>
       <AnimatePresence>
         {loading && <MatrixLoader onLoadingComplete={() => setLoading(false)} />}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {showAdmin && (
+          <AdminPortal 
+            isOpen={showAdmin} 
+            onClose={() => setShowAdmin(false)} 
+            data={portfolioData}
+            onUpdate={handleDataUpdate}
+          />
+        )}
       </AnimatePresence>
       
       {!loading && (
@@ -116,7 +77,7 @@ const App: React.FC = () => {
             </div>
             
             <div className="flex flex-col gap-12">
-              {projects.map((project, index) => (
+              {portfolioData.projects.map((project, index) => (
                 <ProjectCard key={project.id} project={project} index={index} />
               ))}
             </div>
@@ -131,7 +92,7 @@ const App: React.FC = () => {
                 </div>
 
                 <div className="grid grid-cols-1 gap-12">
-                   {experience.map((exp, i) => (
+                   {portfolioData.experience.map((exp, i) => (
                       <motion.div 
                         key={exp.id}
                         className="group border-b border-white/10 pb-16 hover:border-white/30 transition-colors duration-500"
@@ -164,7 +125,7 @@ const App: React.FC = () => {
              </div>
 
              <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                {awards.map((award, i) => (
+                {portfolioData.awards.map((award, i) => (
                   <motion.div 
                     key={award.id}
                     className="p-10 border border-white/10 bg-white/5 backdrop-blur-sm rounded hover:border-white/30 transition-all duration-500 cursor-default"
@@ -199,14 +160,23 @@ const App: React.FC = () => {
                    ))}
                 </div>
 
-                <div className="border-t border-white/10 pt-12 flex flex-col md:flex-row justify-between items-center gap-8">
+                <div className="border-t border-white/10 pt-12 flex flex-col md:flex-row justify-between items-center gap-8 relative">
                    <div className="flex gap-8">
                       <a href="#" className="hover:text-purple-400 hover:scale-125 transition-all duration-300"><Github size={24} /></a>
                       <a href="#" className="hover:text-purple-400 hover:scale-125 transition-all duration-300"><Linkedin size={24} /></a>
                       <a href="#" className="hover:text-purple-400 hover:scale-125 transition-all duration-300"><Twitter size={24} /></a>
                       <a href="#" className="hover:text-purple-400 hover:scale-125 transition-all duration-300"><Mail size={24} /></a>
                    </div>
-                   <p className="text-gray-500 text-sm">© 2024 Zu Kaiquan. All Rights Reserved.</p>
+                   <div className="flex items-center gap-4">
+                      <p className="text-gray-500 text-sm">© 2024 Zu Kaiquan. All Rights Reserved.</p>
+                      <button 
+                        onClick={() => setShowAdmin(true)}
+                        className="text-gray-800 hover:text-gray-500 transition-colors"
+                        title="Admin Access"
+                      >
+                        <Lock size={14} />
+                      </button>
+                   </div>
                 </div>
              </div>
           </section>
