@@ -7,6 +7,7 @@ import Marquee from './components/Marquee';
 import ProjectCard from './components/ProjectCard';
 import NoiseOverlay from './components/NoiseOverlay';
 import AdminPortal from './components/AdminPortal';
+import SocialHub from './components/SocialHub';
 import { getPortfolioData, AppData } from './utils/dataManager';
 import { Github, Linkedin, Mail, Twitter, Lock } from 'lucide-react';
 
@@ -57,6 +58,7 @@ const App: React.FC = () => {
                 <a href="#experience" className="hover:opacity-50 transition-opacity">EXPERIENCE</a>
                 <a href="#honors" className="hover:opacity-50 transition-opacity">HONORS</a>
                 <a href="#skills" className="hover:opacity-50 transition-opacity">SKILLS</a>
+                <a href="#connect" className="hover:opacity-50 transition-opacity">CONNECT</a>
              </div>
              <div className="md:hidden">
                {/* Mobile Menu Icon Placeholder */}
@@ -144,8 +146,8 @@ const App: React.FC = () => {
              </div>
           </section>
 
-          {/* Skills & Footer */}
-          <section id="skills" className="py-24 px-6 md:px-12 bg-gradient-to-b from-black to-gray-900 relative z-10">
+          {/* Skills */}
+          <section id="skills" className="py-24 px-6 md:px-12 bg-gradient-to-b from-black to-[#080808] relative z-10">
              <div className="max-w-7xl mx-auto text-center">
                 <h2 className="text-4xl md:text-6xl font-bold mb-16 tracking-tight">Expertise</h2>
                 <div className="flex flex-wrap justify-center gap-4 mb-32 max-w-4xl mx-auto">
@@ -159,27 +161,25 @@ const App: React.FC = () => {
                       </motion.span>
                    ))}
                 </div>
-
-                <div className="border-t border-white/10 pt-12 flex flex-col md:flex-row justify-between items-center gap-8 relative">
-                   <div className="flex gap-8">
-                      <a href="#" className="hover:text-purple-400 hover:scale-125 transition-all duration-300"><Github size={24} /></a>
-                      <a href="#" className="hover:text-purple-400 hover:scale-125 transition-all duration-300"><Linkedin size={24} /></a>
-                      <a href="#" className="hover:text-purple-400 hover:scale-125 transition-all duration-300"><Twitter size={24} /></a>
-                      <a href="#" className="hover:text-purple-400 hover:scale-125 transition-all duration-300"><Mail size={24} /></a>
-                   </div>
-                   <div className="flex items-center gap-4">
-                      <p className="text-gray-500 text-sm">© 2024 Zu Kaiquan. All Rights Reserved.</p>
-                      <button 
-                        onClick={() => setShowAdmin(true)}
-                        className="text-gray-800 hover:text-gray-500 transition-colors"
-                        title="Admin Access"
-                      >
-                        <Lock size={14} />
-                      </button>
-                   </div>
-                </div>
              </div>
           </section>
+
+          {/* Social Hub (Connect Section) */}
+          <SocialHub />
+
+          {/* Minimal Footer */}
+          <footer className="py-8 border-t border-white/5 bg-black text-center relative z-20">
+             <div className="flex flex-col items-center gap-4">
+                 <p className="text-gray-600 text-xs tracking-widest uppercase">© 2024 Zu Kaiquan. All Rights Reserved.</p>
+                 <button 
+                    onClick={() => setShowAdmin(true)}
+                    className="text-gray-800 hover:text-gray-500 transition-colors"
+                    title="Admin Access"
+                  >
+                    <Lock size={12} />
+                  </button>
+             </div>
+          </footer>
         </main>
       )}
     </>
