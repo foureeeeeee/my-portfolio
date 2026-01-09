@@ -33,7 +33,7 @@ const Hero: React.FC = () => {
     return () => window.removeEventListener('mousemove', handleMouseMove);
   }, [mouseX, mouseY]);
 
-  const smoothTransition = { duration: 1.2, ease: [0.22, 1, 0.36, 1] }; // Custom bezier for premium feel
+  const smoothTransition = { duration: 1.2, ease: [0.22, 1, 0.36, 1] as [number, number, number, number] }; // Custom bezier for premium feel
 
   return (
     <section ref={containerRef} className="relative min-h-screen flex items-center justify-center overflow-hidden px-6 pt-20">
@@ -94,7 +94,7 @@ const Hero: React.FC = () => {
                   transition={{ ...smoothTransition, delay: 0.5 }}
                   className="block"
                 >
-                  I'm <span className="text-gray-500 italic">Lei</span>
+                  I'm <span className="text-gray-500 italic">Zu</span>
                 </motion.span>
               </span>
               <span className="block overflow-hidden text-transparent bg-clip-text bg-gradient-to-r from-white via-gray-200 to-gray-500">
@@ -104,7 +104,7 @@ const Hero: React.FC = () => {
                   transition={{ ...smoothTransition, delay: 0.6 }}
                   className="block"
                 >
-                  Yuting
+                  Kaiquan
                 </motion.span>
               </span>
             </h1>

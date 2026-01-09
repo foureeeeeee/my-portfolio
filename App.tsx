@@ -90,7 +90,7 @@ const App: React.FC = () => {
           
           {/* Navbar */}
           <nav className="fixed top-0 left-0 w-full p-6 md:p-8 flex justify-between items-center z-40 mix-blend-difference">
-             <div className="text-xl font-bold tracking-tighter">LEI.</div>
+             <div className="text-xl font-bold tracking-tighter">ZU.</div>
              <div className="hidden md:flex gap-8 text-sm font-medium tracking-wide">
                 <a href="#works" className="hover:opacity-50 transition-opacity">WORKS</a>
                 <a href="#experience" className="hover:opacity-50 transition-opacity">EXPERIENCE</a>
@@ -206,7 +206,7 @@ const App: React.FC = () => {
                       <a href="#" className="hover:text-purple-400 hover:scale-125 transition-all duration-300"><Twitter size={24} /></a>
                       <a href="#" className="hover:text-purple-400 hover:scale-125 transition-all duration-300"><Mail size={24} /></a>
                    </div>
-                   <p className="text-gray-500 text-sm">© 2024 Lei Yuting. All Rights Reserved.</p>
+                   <p className="text-gray-500 text-sm">© 2024 Zu Kaiquan. All Rights Reserved.</p>
                 </div>
              </div>
           </section>
