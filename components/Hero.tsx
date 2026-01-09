@@ -2,6 +2,107 @@ import React, { useRef, useEffect } from 'react';
 import { motion, useScroll, useTransform, useSpring, useMotionValue } from 'framer-motion';
 import ParticleBackground from './ParticleBackground';
 
+const PortfolioParticles: React.FC = () => {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    let animationFrameId: number;
+    let particles: Array<{x: number, y: number, vx: number, vy: number, size: number, color: string, alpha: number}> = [];
+
+    const resize = () => {
+      canvas.width = canvas.offsetWidth;
+      canvas.height = canvas.offsetHeight;
+      initParticles();
+    };
+
+    const colors = ['#a855f7', '#22c55e', '#3b82f6']; // Purple, Green, Blue
+
+    const initParticles = () => {
+      particles = [];
+      const count = 35; 
+      for (let i = 0; i < count; i++) {
+        particles.push({
+          x: Math.random() * canvas.width,
+          y: Math.random() * canvas.height,
+          vx: (Math.random() - 0.5) * 0.5,
+          vy: (Math.random() - 0.5) * 0.5,
+          size: Math.random() * 2 + 0.5,
+          color: colors[Math.floor(Math.random() * colors.length)],
+          alpha: Math.random() * 0.5 + 0.2
+        });
+      }
+    };
+
+    const draw = () => {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      
+      // Soft Gradient Background around the area
+      const gradient = ctx.createLinearGradient(0, 0, canvas.width, canvas.height);
+      gradient.addColorStop(0, 'rgba(168, 85, 247, 0.08)'); // Purple low opacity
+      gradient.addColorStop(0.5, 'rgba(34, 197, 94, 0.05)'); // Green low opacity
+      gradient.addColorStop(1, 'rgba(59, 130, 246, 0.08)'); // Blue low opacity
+      
+      ctx.fillStyle = gradient;
+      // Draw a rounded rect for the background
+      const radius = 20;
+      ctx.beginPath();
+      ctx.moveTo(radius, 0);
+      ctx.lineTo(canvas.width - radius, 0);
+      ctx.quadraticCurveTo(canvas.width, 0, canvas.width, radius);
+      ctx.lineTo(canvas.width, canvas.height - radius);
+      ctx.quadraticCurveTo(canvas.width, canvas.height, canvas.width - radius, canvas.height);
+      ctx.lineTo(radius, canvas.height);
+      ctx.quadraticCurveTo(0, canvas.height, 0, canvas.height - radius);
+      ctx.lineTo(0, radius);
+      ctx.quadraticCurveTo(0, 0, radius, 0);
+      ctx.closePath();
+      ctx.fill();
+
+      // Draw Particles
+      particles.forEach(p => {
+        p.x += p.vx;
+        p.y += p.vy;
+
+        // Bounce off walls softly or wrap? Let's wrap for flow
+        if (p.x < 0) p.x = canvas.width;
+        if (p.x > canvas.width) p.x = 0;
+        if (p.y < 0) p.y = canvas.height;
+        if (p.y > canvas.height) p.y = 0;
+
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+        ctx.fillStyle = p.color;
+        ctx.globalAlpha = p.alpha;
+        ctx.fill();
+      });
+      
+      ctx.globalAlpha = 1;
+      animationFrameId = requestAnimationFrame(draw);
+    };
+
+    resize();
+    draw();
+    window.addEventListener('resize', resize);
+
+    return () => {
+      window.removeEventListener('resize', resize);
+      cancelAnimationFrame(animationFrameId);
+    };
+  }, []);
+
+  return (
+    <canvas 
+      ref={canvasRef} 
+      className="absolute inset-[-20px] w-[calc(100%+40px)] h-[calc(100%+40px)] pointer-events-none -z-10 blur-sm"
+    />
+  );
+};
+
 const Hero: React.FC = () => {
   const containerRef = useRef<HTMLDivElement>(null);
   
@@ -124,29 +225,33 @@ const Hero: React.FC = () => {
           </motion.div>
         </div>
 
-        <div className="md:col-span-4 flex flex-col justify-end items-start md:items-end text-right space-y-4 opacity-70">
-             <motion.div 
-               className="w-24 h-[1px] bg-gradient-to-r from-transparent to-white mb-4 self-start md:self-end"
-               initial={{ width: 0 }}
-               animate={{ width: 96 }}
-               transition={{ ...smoothTransition, delay: 1.2 }}
-             />
-             <motion.div
-               initial={{ opacity: 0, x: 20 }}
-               animate={{ opacity: 1, x: 0 }}
-               transition={{ ...smoothTransition, delay: 1.3 }}
-             >
-               <p className="text-sm font-mono tracking-widest">DIGITAL PORTFOLIO</p>
-               <p className="text-sm font-mono tracking-widest text-gray-500">2024 - 2025</p>
-             </motion.div>
-             <motion.p 
-               className="text-sm max-w-[250px] mt-4 text-left md:text-right text-gray-400 font-light"
-               initial={{ opacity: 0 }}
-               animate={{ opacity: 1 }}
-               transition={{ ...smoothTransition, delay: 1.5 }}
-             >
-               Crafting immersive digital experiences through code, motion, and design.
-             </motion.p>
+        <div className="md:col-span-4 relative flex flex-col justify-end items-start md:items-end text-right space-y-4">
+            <PortfolioParticles />
+            
+            <div className="opacity-70 flex flex-col items-start md:items-end w-full">
+               <motion.div 
+                 className="w-24 h-[1px] bg-gradient-to-r from-transparent to-white mb-4 self-start md:self-end"
+                 initial={{ width: 0 }}
+                 animate={{ width: 96 }}
+                 transition={{ ...smoothTransition, delay: 1.2 }}
+               />
+               <motion.div
+                 initial={{ opacity: 0, x: 20 }}
+                 animate={{ opacity: 1, x: 0 }}
+                 transition={{ ...smoothTransition, delay: 1.3 }}
+               >
+                 <p className="text-sm font-mono tracking-widest">DIGITAL PORTFOLIO</p>
+                 <p className="text-sm font-mono tracking-widest text-gray-500">2024 - 2025</p>
+               </motion.div>
+               <motion.p 
+                 className="text-sm max-w-[250px] mt-4 text-left md:text-right text-gray-400 font-light"
+                 initial={{ opacity: 0 }}
+                 animate={{ opacity: 1 }}
+                 transition={{ ...smoothTransition, delay: 1.5 }}
+               >
+                 Crafting immersive digital experiences through code, motion, and design.
+               </motion.p>
+            </div>
         </div>
       </motion.div>
       
