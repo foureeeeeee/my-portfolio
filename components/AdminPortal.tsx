@@ -1,8 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, Plus, Trash2, Save, RotateCcw, Lock } from 'lucide-react';
+import { X, Plus, Trash2, Save, RotateCcw, Lock, MapPin } from 'lucide-react';
 import { AppData, savePortfolioData, resetPortfolioData } from '../utils/dataManager';
-import { Project, Experience, Award } from '../types';
+import { Project, Experience, Award, TravelLocation } from '../types';
 
 interface AdminPortalProps {
   isOpen: boolean;
@@ -14,9 +14,10 @@ interface AdminPortalProps {
 const AdminPortal: React.FC<AdminPortalProps> = ({ isOpen, onClose, data, onUpdate }) => {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [password, setPassword] = useState('');
-  const [activeTab, setActiveTab] = useState<'projects' | 'experience' | 'awards'>('projects');
+  const [activeTab, setActiveTab] = useState<'projects' | 'experience' | 'awards' | 'travels'>('projects');
   const [localData, setLocalData] = useState<AppData>(data);
   const [error, setError] = useState('');
+  const mapPickerRef = useRef<HTMLDivElement>(null);
 
   // Sync with prop data when opening
   useEffect(() => {
@@ -38,7 +39,6 @@ const AdminPortal: React.FC<AdminPortalProps> = ({ isOpen, onClose, data, onUpda
   const handleSave = () => {
     savePortfolioData(localData);
     onUpdate(localData);
-    // Optional: show toast
   };
 
   const handleReset = () => {
@@ -53,7 +53,7 @@ const AdminPortal: React.FC<AdminPortalProps> = ({ isOpen, onClose, data, onUpda
     section: keyof AppData,
     id: number,
     field: string,
-    value: string
+    value: any
   ) => {
     setLocalData(prev => ({
       ...prev,
@@ -71,8 +71,10 @@ const AdminPortal: React.FC<AdminPortalProps> = ({ isOpen, onClose, data, onUpda
       newItem = { id: newId, title: 'New Project', category: 'Design', year: '2024', description: 'Description...', image: 'https://picsum.photos/1200/800' } as Project;
     } else if (section === 'experience') {
       newItem = { id: newId, role: 'New Role', company: 'Company', period: '2024', description: 'Description...' } as Experience;
-    } else {
+    } else if (section === 'awards') {
       newItem = { id: newId, title: 'Award Title', rank: 'Winner', year: '2024' } as Award;
+    } else {
+      newItem = { id: newId, name: 'New Location', date: '2024', x: 50, y: 50, images: ['https://picsum.photos/800/600'] } as TravelLocation;
     }
 
     setLocalData(prev => ({
@@ -88,6 +90,21 @@ const AdminPortal: React.FC<AdminPortalProps> = ({ isOpen, onClose, data, onUpda
         [section]: prev[section].filter((item: any) => item.id !== id)
       }));
     }
+  };
+
+  const handleMapClick = (e: React.MouseEvent, id: number) => {
+    if (!mapPickerRef.current) return;
+    const rect = mapPickerRef.current.getBoundingClientRect();
+    const x = ((e.clientX - rect.left) / rect.width) * 100;
+    const y = ((e.clientY - rect.top) / rect.height) * 100;
+    
+    // Update both x and y
+    setLocalData(prev => ({
+        ...prev,
+        travels: prev.travels.map(item => 
+          item.id === id ? { ...item, x, y } : item
+        )
+    }));
   };
 
   if (!isOpen) return null;
@@ -106,7 +123,7 @@ const AdminPortal: React.FC<AdminPortalProps> = ({ isOpen, onClose, data, onUpda
             <div className="w-3 h-3 rounded-full bg-red-500"/>
             <div className="w-3 h-3 rounded-full bg-yellow-500"/>
             <div className="w-3 h-3 rounded-full bg-green-500"/>
-            <span className="ml-4 font-mono text-sm text-gray-400">ADMIN_PORTAL_V1.0</span>
+            <span className="ml-4 font-mono text-sm text-gray-400">ADMIN_PORTAL_V1.1</span>
           </div>
           <button onClick={onClose} className="p-2 hover:bg-white/10 rounded-full transition-colors">
             <X size={20} />
@@ -141,7 +158,7 @@ const AdminPortal: React.FC<AdminPortalProps> = ({ isOpen, onClose, data, onUpda
             {/* Sidebar */}
             <div className="w-64 border-r border-white/10 bg-black/20 p-6 flex flex-col gap-2">
               <div className="text-xs font-mono text-gray-500 mb-4 uppercase tracking-wider">Collections</div>
-              {(['projects', 'experience', 'awards'] as const).map(tab => (
+              {(['projects', 'experience', 'awards', 'travels'] as const).map(tab => (
                 <button
                   key={tab}
                   onClick={() => setActiveTab(tab)}
@@ -300,6 +317,58 @@ const AdminPortal: React.FC<AdminPortalProps> = ({ isOpen, onClose, data, onUpda
                               />
                             </div>
                           </>
+                        )}
+
+                        {activeTab === 'travels' && (
+                           <>
+                              <div className="col-span-1">
+                                <label className="text-xs text-gray-500 block mb-1">Location Name</label>
+                                <input 
+                                  value={item.name} 
+                                  onChange={(e) => handleInputChange('travels', item.id, 'name', e.target.value)}
+                                  className="w-full bg-black/20 border border-white/10 rounded px-3 py-2 text-sm focus:border-purple-500 focus:outline-none"
+                                />
+                              </div>
+                              <div className="col-span-1">
+                                <label className="text-xs text-gray-500 block mb-1">Date/Year</label>
+                                <input 
+                                  value={item.date} 
+                                  onChange={(e) => handleInputChange('travels', item.id, 'date', e.target.value)}
+                                  className="w-full bg-black/20 border border-white/10 rounded px-3 py-2 text-sm focus:border-purple-500 focus:outline-none"
+                                />
+                              </div>
+                              <div className="col-span-2">
+                                <label className="text-xs text-gray-500 block mb-1">Images (Comma separated URLs)</label>
+                                <textarea 
+                                  value={item.images.join(',')} 
+                                  onChange={(e) => handleInputChange('travels', item.id, 'images', e.target.value.split(','))}
+                                  className="w-full bg-black/20 border border-white/10 rounded px-3 py-2 text-sm focus:border-purple-500 focus:outline-none h-16 font-mono text-xs"
+                                />
+                              </div>
+                              <div className="col-span-2">
+                                <label className="text-xs text-gray-500 block mb-2">Location Coordinates (Click to set)</label>
+                                <div 
+                                    ref={mapPickerRef}
+                                    className="relative w-full aspect-[2/1] bg-black border border-white/20 rounded cursor-crosshair overflow-hidden group/map"
+                                    onClick={(e) => handleMapClick(e, item.id)}
+                                >
+                                     {/* Map Background for Reference */}
+                                    <img 
+                                        src="https://upload.wikimedia.org/wikipedia/commons/thumb/a/a3/World_map_blank_black_lines_4500px_monochrome.png/800px-World_map_blank_black_lines_4500px_monochrome.png" 
+                                        className="absolute inset-0 w-full h-full object-cover opacity-50 pointer-events-none"
+                                        alt="map reference"
+                                    />
+                                    {/* The Dot */}
+                                    <div 
+                                        className="absolute w-3 h-3 bg-yellow-500 rounded-full border border-white -ml-1.5 -mt-1.5"
+                                        style={{ left: `${item.x}%`, top: `${item.y}%` }}
+                                    />
+                                    <div className="absolute top-2 right-2 text-xs bg-black/50 px-2 rounded">
+                                        X: {Math.round(item.x)}% Y: {Math.round(item.y)}%
+                                    </div>
+                                </div>
+                              </div>
+                           </>
                         )}
                       </div>
                     </motion.div>

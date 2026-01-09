@@ -1,9 +1,10 @@
-import { Project, Experience, Award } from '../types';
+import { Project, Experience, Award, TravelLocation } from '../types';
 
 export interface AppData {
   projects: Project[];
   experience: Experience[];
   awards: Award[];
+  travels: TravelLocation[];
 }
 
 const DEFAULT_PROJECTS: Project[] = [
@@ -71,13 +72,53 @@ const DEFAULT_AWARDS: Award[] = [
   { id: 3, title: "China Packaging Creative Design", rank: "Third Prize", year: "2022" }
 ];
 
+const DEFAULT_TRAVELS: TravelLocation[] = [
+  {
+    id: 1,
+    name: "Tokyo, Japan",
+    date: "2023",
+    x: 85,
+    y: 35,
+    images: [
+      "https://images.unsplash.com/photo-1540959733332-eab4deabeeaf?q=80&w=1000",
+      "https://images.unsplash.com/photo-1503899036084-c55cdd92da26?q=80&w=1000",
+      "https://images.unsplash.com/photo-1536098561742-ca998e48cbcc?q=80&w=1000"
+    ]
+  },
+  {
+    id: 2,
+    name: "Reykjavik, Iceland",
+    date: "2022",
+    x: 44,
+    y: 18,
+    images: [
+      "https://images.unsplash.com/photo-1476610182048-b716b8518aae?q=80&w=1000",
+      "https://images.unsplash.com/photo-1521651201144-634ffa7f6bf2?q=80&w=1000"
+    ]
+  },
+  {
+    id: 3,
+    name: "Paris, France",
+    date: "2021",
+    x: 49,
+    y: 28,
+    images: [
+      "https://images.unsplash.com/photo-1502602898657-3e91760cbb34?q=80&w=1000",
+      "https://images.unsplash.com/photo-1499856871940-a09627c6d7db?q=80&w=1000"
+    ]
+  }
+];
+
 const STORAGE_KEY = 'zu_portfolio_data_v1';
 
 export const getPortfolioData = (): AppData => {
   try {
     const stored = localStorage.getItem(STORAGE_KEY);
     if (stored) {
-      return JSON.parse(stored);
+      const data = JSON.parse(stored);
+      // Ensure backwards compatibility if travels doesn't exist in stored data
+      if (!data.travels) data.travels = DEFAULT_TRAVELS;
+      return data;
     }
   } catch (e) {
     console.error("Failed to load portfolio data", e);
@@ -85,7 +126,8 @@ export const getPortfolioData = (): AppData => {
   return {
     projects: DEFAULT_PROJECTS,
     experience: DEFAULT_EXPERIENCE,
-    awards: DEFAULT_AWARDS
+    awards: DEFAULT_AWARDS,
+    travels: DEFAULT_TRAVELS
   };
 };
 
@@ -102,6 +144,7 @@ export const resetPortfolioData = () => {
   return {
     projects: DEFAULT_PROJECTS,
     experience: DEFAULT_EXPERIENCE,
-    awards: DEFAULT_AWARDS
+    awards: DEFAULT_AWARDS,
+    travels: DEFAULT_TRAVELS
   };
 };

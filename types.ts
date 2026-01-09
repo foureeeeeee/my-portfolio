@@ -26,3 +26,12 @@ export interface NavItem {
   label: string;
   href: string;
 }
+
+export interface TravelLocation {
+  id: number;
+  name: string;
+  date: string;
+  x: number; // Percentage 0-100
+  y: number; // Percentage 0-100
+  images: string[];
+}

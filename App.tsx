@@ -8,6 +8,7 @@ import ProjectCard from './components/ProjectCard';
 import NoiseOverlay from './components/NoiseOverlay';
 import AdminPortal from './components/AdminPortal';
 import SocialHub from './components/SocialHub';
+import WorldMap from './components/WorldMap';
 import { getPortfolioData, AppData } from './utils/dataManager';
 import { Github, Linkedin, Mail, Twitter, Lock } from 'lucide-react';
 
@@ -56,6 +57,7 @@ const App: React.FC = () => {
              <div className="hidden md:flex gap-8 text-sm font-medium tracking-wide">
                 <a href="#works" className="hover:opacity-50 transition-opacity">WORKS</a>
                 <a href="#experience" className="hover:opacity-50 transition-opacity">EXPERIENCE</a>
+                <a href="#travel" className="hover:opacity-50 transition-opacity">TRAVEL</a>
                 <a href="#honors" className="hover:opacity-50 transition-opacity">HONORS</a>
                 <a href="#skills" className="hover:opacity-50 transition-opacity">SKILLS</a>
                 <a href="#connect" className="hover:opacity-50 transition-opacity">CONNECT</a>
@@ -118,6 +120,9 @@ const App: React.FC = () => {
                 </div>
              </div>
           </section>
+
+          {/* World Map Section */}
+          <WorldMap locations={portfolioData.travels} />
 
           {/* Honors & Awards */}
           <section id="honors" className="py-24 px-6 md:px-12 max-w-7xl mx-auto relative z-10">
