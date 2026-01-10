@@ -31,7 +31,7 @@ const ExperienceAvatar: React.FC = () => {
     canvas.height = height;
 
     const particles: Particle[] = [];
-    const gap = 10; // MORE DENSE
+    const gap = 10;
     let mouse = { x: -1000, y: -1000 };
 
     class Particle {
@@ -55,7 +55,7 @@ const ExperienceAvatar: React.FC = () => {
         this.color =
           Math.random() > 0.85
             ? '#ffffff'
-            : `rgba(34,197,94,${Math.random() * 0.7 + 0.3})`;
+            : `rgba(168,85,247,${Math.random() * 0.7 + 0.3})`; // 💜 PURPLE
       }
 
       update() {
@@ -67,8 +67,8 @@ const ExperienceAvatar: React.FC = () => {
         if (dist < forceRadius) {
           const angle = Math.atan2(dy, dx);
           const force = (forceRadius - dist) / forceRadius;
+          const power = active ? 80 : 45;
 
-          const power = active ? 80 : 45; // 🔥 MORE INTENSE ON HOVER
           this.vx -= Math.cos(angle) * force * power;
           this.vy -= Math.sin(angle) * force * power;
         }
@@ -151,10 +151,7 @@ const ExperienceAvatar: React.FC = () => {
         style={{ rotateX, rotateY, transformStyle: 'preserve-3d' }}
       >
         {/* IMAGE */}
-        <motion.div
-          className="absolute inset-0"
-          style={{ scale: 1.15, z: -20 }}
-        >
+        <motion.div className="absolute inset-0" style={{ scale: 1.15, z: -20 }}>
           <img
             src={AVATAR_URL}
             alt="Avatar"
@@ -162,16 +159,16 @@ const ExperienceAvatar: React.FC = () => {
               w-full h-full object-cover transition-all duration-500
               ${active
                 ? 'filter-none'
-                : 'contrast-125 brightness-90 saturate-110 hue-rotate-[200deg]'}
+                : 'contrast-125 brightness-90 saturate-110 hue-rotate-[260deg]'}
             `}
           />
 
-          {/* CYBER COLOR OVERLAY (DISAPPEARS ON HOVER) */}
+          {/* PURPLE CYBER OVERLAY */}
           <div
             className={`
               absolute inset-0 transition-opacity duration-500
               ${active ? 'opacity-0' : 'opacity-60'}
-              bg-gradient-to-br from-green-900/40 via-cyan-500/10 to-black
+              bg-gradient-to-br from-purple-900/50 via-fuchsia-600/20 to-black
               mix-blend-overlay
             `}
           />
@@ -196,7 +193,7 @@ const ExperienceAvatar: React.FC = () => {
           <h3 className="text-white text-2xl font-bold bg-black/50 backdrop-blur-md px-3 py-1 mb-1">
             ZU KAIQUAN
           </h3>
-          <p className="text-green-400 text-xs font-mono bg-black/50 backdrop-blur-md px-3 py-1">
+          <p className="text-purple-400 text-xs font-mono bg-black/50 backdrop-blur-md px-3 py-1">
             SYSTEM.IDENTITY_VERIFIED
           </p>
         </div>
@@ -206,3 +203,4 @@ const ExperienceAvatar: React.FC = () => {
 };
 
 export default ExperienceAvatar;
+
