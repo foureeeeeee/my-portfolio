@@ -9,6 +9,7 @@ import NoiseOverlay from './components/NoiseOverlay';
 import AdminPortal from './components/AdminPortal';
 import SocialHub from './components/SocialHub';
 import WorldMap from './components/WorldMap';
+import ExperienceAvatar from './components/ExperienceAvatar';
 import { getPortfolioData, AppData } from './utils/dataManager';
 import { Github, Linkedin, Mail, Twitter, Lock } from 'lucide-react';
 
@@ -95,28 +96,40 @@ const App: React.FC = () => {
                     <h2 className="text-sm font-mono tracking-widest text-gray-400">RESEARCH & EXPERIENCE</h2>
                 </div>
 
-                <div className="grid grid-cols-1 gap-12">
-                   {portfolioData.experience.map((exp, i) => (
-                      <motion.div 
-                        key={exp.id}
-                        className="group border-b border-white/10 pb-16 hover:border-white/30 transition-colors duration-500"
-                        initial={{ opacity: 0, y: 30 }}
-                        whileInView={{ opacity: 1, y: 0 }}
-                        viewport={{ once: true, margin: "-10%" }}
-                        transition={{ delay: i * 0.1, duration: 0.8, ease: [0.22, 1, 0.36, 1] }}
-                      >
-                         <div className="grid grid-cols-1 md:grid-cols-12 gap-6 items-start">
-                            <div className="md:col-span-3 text-gray-500 font-mono text-sm">{exp.period}</div>
-                            <div className="md:col-span-5">
-                               <h3 className="text-2xl md:text-3xl font-bold mb-3 group-hover:text-purple-400 transition-colors duration-300">{exp.role}</h3>
-                               <div className="text-lg text-gray-300 font-light">{exp.company}</div>
-                            </div>
-                            <div className="md:col-span-4 text-gray-400 text-sm leading-relaxed">
-                               {exp.description}
-                            </div>
-                         </div>
-                      </motion.div>
-                   ))}
+                <div className="grid grid-cols-1 lg:grid-cols-12 gap-16 items-start">
+                   {/* Left Column: Interactive Avatar */}
+                   <div className="lg:col-span-5 sticky top-32 z-20">
+                      <ExperienceAvatar />
+                      <div className="mt-8 text-xs text-gray-600 font-mono hidden lg:block">
+                        // INTERACTIVE VISUAL<br/>
+                        // HOVER TO DECRYPT IDENTITY
+                      </div>
+                   </div>
+
+                   {/* Right Column: Experience List */}
+                   <div className="lg:col-span-7 flex flex-col gap-12">
+                     {portfolioData.experience.map((exp, i) => (
+                        <motion.div 
+                          key={exp.id}
+                          className="group border-b border-white/10 pb-16 hover:border-white/30 transition-colors duration-500"
+                          initial={{ opacity: 0, y: 30 }}
+                          whileInView={{ opacity: 1, y: 0 }}
+                          viewport={{ once: true, margin: "-10%" }}
+                          transition={{ delay: i * 0.1, duration: 0.8, ease: [0.22, 1, 0.36, 1] }}
+                        >
+                           <div className="grid grid-cols-1 md:grid-cols-12 gap-6 items-start">
+                              <div className="md:col-span-3 text-gray-500 font-mono text-sm">{exp.period}</div>
+                              <div className="md:col-span-9">
+                                 <h3 className="text-2xl md:text-3xl font-bold mb-3 group-hover:text-purple-400 transition-colors duration-300">{exp.role}</h3>
+                                 <div className="text-lg text-gray-300 font-light mb-4">{exp.company}</div>
+                                 <div className="text-gray-400 text-sm leading-relaxed">
+                                    {exp.description}
+                                 </div>
+                              </div>
+                           </div>
+                        </motion.div>
+                     ))}
+                   </div>
                 </div>
              </div>
           </section>

@@ -15,13 +15,6 @@ const ParticleBackground: React.FC = () => {
     canvas.width = width;
     canvas.height = height;
 
-    const colors = [
-      { r: 168, g: 85, b: 247 }, // Purple
-      { r: 59, g: 130, b: 246 }, // Blue
-      { r: 34, g: 197, b: 94 },  // Green
-      { r: 236, g: 72, b: 153 }  // Pink
-    ];
-
     const particles: Particle[] = [];
     const particleCount = 100;
 
@@ -34,6 +27,7 @@ const ParticleBackground: React.FC = () => {
       vx: number;
       vy: number;
       color: string;
+      alpha: number;
 
       constructor() {
         this.x = Math.random() * width;
@@ -43,8 +37,9 @@ const ParticleBackground: React.FC = () => {
         this.vx = (Math.random() - 0.5) * 0.5;
         this.vy = (Math.random() - 0.5) * 0.5;
         
-        const c = colors[Math.floor(Math.random() * colors.length)];
-        this.color = `rgba(${c.r}, ${c.g}, ${c.b}, ${Math.random() * 0.5 + 0.3})`;
+        this.alpha = Math.random() * 0.5 + 0.3;
+        this.color = ''; // Set in update
+        this.updateColor(); // Initial color set
       }
 
       draw() {
@@ -53,6 +48,26 @@ const ParticleBackground: React.FC = () => {
         ctx.beginPath();
         ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
         ctx.fill();
+      }
+
+      updateColor() {
+        const p = this.x / width;
+        let r, g, b;
+
+        // Gradient: Purple (168, 85, 247) -> Green (34, 197, 94) -> Blue (59, 130, 246)
+        if (p <= 0.5) {
+            const t = p * 2; // Normalize 0-0.5 to 0-1
+            r = 168 + (34 - 168) * t;
+            g = 85 + (197 - 85) * t;
+            b = 247 + (94 - 247) * t;
+        } else {
+            const t = (p - 0.5) * 2; // Normalize 0.5-1 to 0-1
+            r = 34 + (59 - 34) * t;
+            g = 197 + (130 - 197) * t;
+            b = 94 + (246 - 94) * t;
+        }
+
+        this.color = `rgba(${Math.floor(r)}, ${Math.floor(g)}, ${Math.floor(b)}, ${this.alpha})`;
       }
 
       update() {
@@ -77,8 +92,7 @@ const ParticleBackground: React.FC = () => {
         this.x += this.vx;
         this.y += this.vy;
 
-        // Friction to keep them from going too fast indefinitely, 
-        // but we also want some constant movement so we limit speed instead of strict friction
+        // Friction to keep them from going too fast indefinitely
         const speed = Math.sqrt(this.vx * this.vx + this.vy * this.vy);
         const maxSpeed = 3;
         if (speed > maxSpeed) {
@@ -91,6 +105,8 @@ const ParticleBackground: React.FC = () => {
         else if (this.x < 0) this.x = width;
         if (this.y > height) this.y = 0;
         else if (this.y < 0) this.y = height;
+
+        this.updateColor();
       }
     }
 

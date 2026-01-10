@@ -21,7 +21,8 @@ const PortfolioParticles: React.FC = () => {
       initParticles();
     };
 
-    const colors = ['#a855f7', '#22c55e', '#3b82f6', '#ec4899']; // Added Pink
+    // Removed Pink to match the requested Purple -> Green -> Blue scheme
+    const colors = ['#a855f7', '#22c55e', '#3b82f6']; 
 
     const initParticles = () => {
       particles = [];
