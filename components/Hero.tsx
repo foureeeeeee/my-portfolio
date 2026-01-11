@@ -1,5 +1,5 @@
 import React, { useRef, useEffect } from 'react';
-import { motion, useScroll, useTransform, useSpring, useMotionValue } from 'framer-motion';
+import { motion, useScroll, useTransform, useSpring, useMotionValue, Variants } from 'framer-motion';
 import ParticleBackground from './ParticleBackground';
 
 const PortfolioParticles: React.FC = () => {
@@ -144,25 +144,50 @@ const Hero: React.FC = () => {
 
   const smoothTransition = { duration: 1.2, ease: [0.22, 1, 0.36, 1] as [number, number, number, number] };
 
-  // --- GLITCH ANIMATION VARIANTS ---
-  const glitchVariants = {
+  // --- ANIMATION VARIANTS ---
+  
+  const glitchVariants: Variants = {
     hover: {
       opacity: [0, 0.5, 0.2, 0.7, 0],
-      x: [-5, 5, -2, 7, 0],
-      y: [2, -5, 0, 3, 0],
-      scale: 1.025,
-      // Fix: Cast "linear" as const to match Easing type
-      transition: { repeat: Infinity, duration: 0.25, ease: "linear" as const }
+      x: [-4, 4, -2, 6, 0],
+      y: [2, -4, 0, 3, 0],
+      scale: 1.05,
+      transition: { repeat: Infinity, duration: 0.2, ease: "linear" }
     },
     initial: { opacity: 0, x: 0, y: 0 }
   };
   
-  const mainTextVariants = {
+  const mainTextVariants: Variants = {
     hover: { 
-        scale: 1.025,
-        transition: { duration: 0.3 }
+        scale: 1.05,
+        transition: { duration: 0.4, ease: "easeOut" }
     },
     initial: { scale: 1 }
+  };
+
+  const wordExpansionVariants: Variants = {
+    hover: {
+        letterSpacing: "0.05em",
+        transition: { duration: 0.5, ease: "easeOut" }
+    },
+    initial: {
+        letterSpacing: "-0.02em"
+    }
+  };
+
+  // Gradient Sweep for "Lamination" effect
+  const laminationVariants: Variants = {
+    hover: {
+        backgroundPosition: ["0% center", "200% center"],
+        transition: { 
+            duration: 1.5, 
+            repeat: Infinity, 
+            ease: "linear"
+        }
+    },
+    initial: {
+        backgroundPosition: "0% center"
+    }
   };
 
   return (
@@ -210,45 +235,66 @@ const Hero: React.FC = () => {
             <motion.div
                 initial="initial"
                 whileHover="hover"
-                className="relative"
+                className="relative z-20"
             >
                 <motion.h1 
-                    className="text-7xl md:text-[10rem] leading-[0.85] font-bold tracking-tighter uppercase relative z-20"
+                    className="text-7xl md:text-[10rem] leading-[0.85] font-bold uppercase relative z-20"
                     variants={mainTextVariants}
                 >
+                  {/* HELLO */}
                   <span className="block overflow-hidden">
-                    <motion.span 
-                      initial={{ y: "100%" }}
-                      animate={{ y: 0 }}
-                      transition={{ ...smoothTransition, delay: 0.4 }}
-                      className="block group-hover:text-green-400 transition-colors duration-300"
+                    <motion.div 
+                      variants={wordExpansionVariants}
+                      className="inline-block group-hover:text-green-400 transition-colors duration-300"
                     >
-                      Hello
-                    </motion.span>
+                        <motion.span 
+                          initial={{ y: "100%" }}
+                          animate={{ y: 0 }}
+                          transition={{ ...smoothTransition, delay: 0.4 }}
+                          className="block"
+                        >
+                          Hello
+                        </motion.span>
+                    </motion.div>
                   </span>
+                  
+                  {/* I'M ZU */}
                   <span className="block overflow-hidden">
-                    <motion.span 
-                      initial={{ y: "100%" }}
-                      animate={{ y: 0 }}
-                      transition={{ ...smoothTransition, delay: 0.5 }}
-                      className="block group-hover:text-green-400 transition-colors duration-300"
+                    <motion.div 
+                      variants={wordExpansionVariants}
+                      className="inline-block group-hover:text-green-400 transition-colors duration-300"
                     >
-                      I'm <span className="text-gray-500 italic group-hover:text-green-300 transition-colors duration-300">Zu</span>
-                    </motion.span>
+                        <motion.span 
+                          initial={{ y: "100%" }}
+                          animate={{ y: 0 }}
+                          transition={{ ...smoothTransition, delay: 0.5 }}
+                          className="block"
+                        >
+                          I'm <span className="text-gray-500 italic group-hover:text-white transition-colors duration-300">Zu</span>
+                        </motion.span>
+                    </motion.div>
                   </span>
-                  <span className="block overflow-hidden text-transparent bg-clip-text bg-gradient-to-r from-white via-gray-200 to-gray-500 group-hover:from-green-400 group-hover:to-emerald-600 transition-all duration-300">
-                    <motion.span 
-                      initial={{ y: "100%" }}
-                      animate={{ y: 0 }}
-                      transition={{ ...smoothTransition, delay: 0.6 }}
-                      className="block"
+
+                  {/* KAIQUAN (Laminated) */}
+                  <span className="block overflow-hidden">
+                    <motion.div 
+                         initial={{ y: "100%" }}
+                         animate={{ y: 0 }}
+                         transition={{ ...smoothTransition, delay: 0.6 }}
+                         className="block"
                     >
-                      Kaiquan
-                    </motion.span>
+                        {/* Lamination Gradient Text */}
+                        <motion.span 
+                            variants={{...wordExpansionVariants, ...laminationVariants}}
+                            className="block text-transparent bg-clip-text bg-gradient-to-r from-white via-gray-300 to-gray-600 group-hover:from-green-500 group-hover:via-emerald-200 group-hover:to-green-500 bg-[length:200%_auto]"
+                        >
+                          Kaiquan
+                        </motion.span>
+                    </motion.div>
                   </span>
                 </motion.h1>
 
-                {/* Glitch Layer 1 (Red) */}
+                {/* Glitch Layer 1 (Red) - Behind */}
                 <motion.div 
                     className="absolute inset-0 z-10 text-7xl md:text-[10rem] leading-[0.85] font-bold tracking-tighter uppercase text-red-500 mix-blend-screen pointer-events-none select-none"
                     variants={glitchVariants}
@@ -259,15 +305,15 @@ const Hero: React.FC = () => {
                     <span className="block">Kaiquan</span>
                 </motion.div>
 
-                {/* Glitch Layer 2 (Blue) */}
+                {/* Glitch Layer 2 (Blue) - Behind */}
                 <motion.div 
                     className="absolute inset-0 z-10 text-7xl md:text-[10rem] leading-[0.85] font-bold tracking-tighter uppercase text-blue-500 mix-blend-screen pointer-events-none select-none"
                     variants={{
                         ...glitchVariants,
                         hover: {
                             ...glitchVariants.hover,
-                            x: [5, -5, 2, -7, 0], // Inverse movement
-                            transition: { repeat: Infinity, duration: 0.2, delay: 0.05 }
+                            x: [4, -4, 2, -6, 0], // Inverse movement
+                            transition: { repeat: Infinity, duration: 0.25, delay: 0.05 }
                         }
                     }}
                     aria-hidden="true"
