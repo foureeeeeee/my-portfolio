@@ -21,7 +21,6 @@ const PortfolioParticles: React.FC = () => {
       initParticles();
     };
 
-    // Removed Pink to match the requested Purple -> Green -> Blue scheme
     const colors = ['#a855f7', '#22c55e', '#3b82f6']; 
 
     const initParticles = () => {
@@ -43,31 +42,18 @@ const PortfolioParticles: React.FC = () => {
     const draw = () => {
       ctx.clearRect(0, 0, canvas.width, canvas.height);
       
-      // Soft Gradient Background around the area
       const gradient = ctx.createLinearGradient(0, 0, canvas.width, canvas.height);
-      gradient.addColorStop(0, 'rgba(168, 85, 247, 0.08)'); // Purple low opacity
-      gradient.addColorStop(0.5, 'rgba(34, 197, 94, 0.05)'); // Green low opacity
-      gradient.addColorStop(1, 'rgba(59, 130, 246, 0.08)'); // Blue low opacity
+      gradient.addColorStop(0, 'rgba(168, 85, 247, 0.08)');
+      gradient.addColorStop(0.5, 'rgba(34, 197, 94, 0.05)');
+      gradient.addColorStop(1, 'rgba(59, 130, 246, 0.08)');
       
       ctx.fillStyle = gradient;
-      // Draw a rounded rect for the background
       const radius = 20;
       ctx.beginPath();
-      ctx.moveTo(radius, 0);
-      ctx.lineTo(canvas.width - radius, 0);
-      ctx.quadraticCurveTo(canvas.width, 0, canvas.width, radius);
-      ctx.lineTo(canvas.width, canvas.height - radius);
-      ctx.quadraticCurveTo(canvas.width, canvas.height, canvas.width - radius, canvas.height);
-      ctx.lineTo(radius, canvas.height);
-      ctx.quadraticCurveTo(0, canvas.height, 0, canvas.height - radius);
-      ctx.lineTo(0, radius);
-      ctx.quadraticCurveTo(0, 0, radius, 0);
-      ctx.closePath();
+      ctx.roundRect(0, 0, canvas.width, canvas.height, radius);
       ctx.fill();
 
-      // Draw Particles
       particles.forEach(p => {
-        // Mouse Interaction
         const rect = canvas.getBoundingClientRect();
         const localMouseX = mouse.x - rect.left;
         const localMouseY = mouse.y - rect.top;
@@ -85,7 +71,6 @@ const PortfolioParticles: React.FC = () => {
         p.x += p.vx;
         p.y += p.vy;
 
-        // Bounce off walls softly or wrap? Let's wrap for flow
         if (p.x < 0) p.x = canvas.width;
         if (p.x > canvas.width) p.x = 0;
         if (p.y < 0) p.y = canvas.height;
@@ -131,11 +116,9 @@ const PortfolioParticles: React.FC = () => {
 const Hero: React.FC = () => {
   const containerRef = useRef<HTMLDivElement>(null);
   
-  // Mouse tracking for parallax blobs
   const mouseX = useMotionValue(0);
   const mouseY = useMotionValue(0);
 
-  // Smooth spring physics for blobs following mouse
   const springConfig = { damping: 30, stiffness: 150, mass: 1 };
   const blob1X = useSpring(useTransform(mouseX, [0, window.innerWidth], [-50, 50]), springConfig);
   const blob1Y = useSpring(useTransform(mouseY, [0, window.innerHeight], [-50, 50]), springConfig);
@@ -159,13 +142,33 @@ const Hero: React.FC = () => {
     return () => window.removeEventListener('mousemove', handleMouseMove);
   }, [mouseX, mouseY]);
 
-  const smoothTransition = { duration: 1.2, ease: [0.22, 1, 0.36, 1] as [number, number, number, number] }; // Custom bezier for premium feel
+  const smoothTransition = { duration: 1.2, ease: [0.22, 1, 0.36, 1] as [number, number, number, number] };
+
+  // --- GLITCH ANIMATION VARIANTS ---
+  const glitchVariants = {
+    hover: {
+      opacity: [0, 0.5, 0.2, 0.7, 0],
+      x: [-5, 5, -2, 7, 0],
+      y: [2, -5, 0, 3, 0],
+      scale: 1.025,
+      // Fix: Cast "linear" as const to match Easing type
+      transition: { repeat: Infinity, duration: 0.25, ease: "linear" as const }
+    },
+    initial: { opacity: 0, x: 0, y: 0 }
+  };
+  
+  const mainTextVariants = {
+    hover: { 
+        scale: 1.025,
+        transition: { duration: 0.3 }
+    },
+    initial: { scale: 1 }
+  };
 
   return (
     <section ref={containerRef} className="relative min-h-screen flex items-center justify-center overflow-hidden px-6 pt-20">
       <ParticleBackground />
       
-      {/* Animated Blob Background with Mouse Interaction */}
       <motion.div 
         className="absolute right-[10%] top-[20%] w-[300px] h-[300px] md:w-[600px] md:h-[600px] rounded-full bg-purple-600/20 blur-[120px] mix-blend-screen"
         style={{ x: blob1X, y: blob1Y }}
@@ -201,39 +204,80 @@ const Hero: React.FC = () => {
             initial={{ opacity: 0, y: 100 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ ...smoothTransition, delay: 0.2 }}
+            className="relative group inline-block cursor-pointer mb-8"
           >
-            <h1 className="text-7xl md:text-[10rem] leading-[0.85] font-bold tracking-tighter uppercase mb-8">
-              <span className="block overflow-hidden">
-                <motion.span 
-                  initial={{ y: "100%" }}
-                  animate={{ y: 0 }}
-                  transition={{ ...smoothTransition, delay: 0.4 }}
-                  className="block"
+            {/* Interactive Wrapper for Title */}
+            <motion.div
+                initial="initial"
+                whileHover="hover"
+                className="relative"
+            >
+                <motion.h1 
+                    className="text-7xl md:text-[10rem] leading-[0.85] font-bold tracking-tighter uppercase relative z-20"
+                    variants={mainTextVariants}
                 >
-                  Hello
-                </motion.span>
-              </span>
-              <span className="block overflow-hidden">
-                <motion.span 
-                  initial={{ y: "100%" }}
-                  animate={{ y: 0 }}
-                  transition={{ ...smoothTransition, delay: 0.5 }}
-                  className="block"
+                  <span className="block overflow-hidden">
+                    <motion.span 
+                      initial={{ y: "100%" }}
+                      animate={{ y: 0 }}
+                      transition={{ ...smoothTransition, delay: 0.4 }}
+                      className="block group-hover:text-green-400 transition-colors duration-300"
+                    >
+                      Hello
+                    </motion.span>
+                  </span>
+                  <span className="block overflow-hidden">
+                    <motion.span 
+                      initial={{ y: "100%" }}
+                      animate={{ y: 0 }}
+                      transition={{ ...smoothTransition, delay: 0.5 }}
+                      className="block group-hover:text-green-400 transition-colors duration-300"
+                    >
+                      I'm <span className="text-gray-500 italic group-hover:text-green-300 transition-colors duration-300">Zu</span>
+                    </motion.span>
+                  </span>
+                  <span className="block overflow-hidden text-transparent bg-clip-text bg-gradient-to-r from-white via-gray-200 to-gray-500 group-hover:from-green-400 group-hover:to-emerald-600 transition-all duration-300">
+                    <motion.span 
+                      initial={{ y: "100%" }}
+                      animate={{ y: 0 }}
+                      transition={{ ...smoothTransition, delay: 0.6 }}
+                      className="block"
+                    >
+                      Kaiquan
+                    </motion.span>
+                  </span>
+                </motion.h1>
+
+                {/* Glitch Layer 1 (Red) */}
+                <motion.div 
+                    className="absolute inset-0 z-10 text-7xl md:text-[10rem] leading-[0.85] font-bold tracking-tighter uppercase text-red-500 mix-blend-screen pointer-events-none select-none"
+                    variants={glitchVariants}
+                    aria-hidden="true"
                 >
-                  I'm <span className="text-gray-500 italic">Zu</span>
-                </motion.span>
-              </span>
-              <span className="block overflow-hidden text-transparent bg-clip-text bg-gradient-to-r from-white via-gray-200 to-gray-500">
-                <motion.span 
-                  initial={{ y: "100%" }}
-                  animate={{ y: 0 }}
-                  transition={{ ...smoothTransition, delay: 0.6 }}
-                  className="block"
+                    <span className="block">Hello</span>
+                    <span className="block">I'm <span className="italic">Zu</span></span>
+                    <span className="block">Kaiquan</span>
+                </motion.div>
+
+                {/* Glitch Layer 2 (Blue) */}
+                <motion.div 
+                    className="absolute inset-0 z-10 text-7xl md:text-[10rem] leading-[0.85] font-bold tracking-tighter uppercase text-blue-500 mix-blend-screen pointer-events-none select-none"
+                    variants={{
+                        ...glitchVariants,
+                        hover: {
+                            ...glitchVariants.hover,
+                            x: [5, -5, 2, -7, 0], // Inverse movement
+                            transition: { repeat: Infinity, duration: 0.2, delay: 0.05 }
+                        }
+                    }}
+                    aria-hidden="true"
                 >
-                  Kaiquan
-                </motion.span>
-              </span>
-            </h1>
+                    <span className="block">Hello</span>
+                    <span className="block">I'm <span className="italic">Zu</span></span>
+                    <span className="block">Kaiquan</span>
+                </motion.div>
+            </motion.div>
+
           </motion.div>
 
           <motion.div 
