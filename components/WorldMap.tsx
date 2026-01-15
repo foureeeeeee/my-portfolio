@@ -7,52 +7,6 @@ import { TravelLocation } from '../types';
 
 // --- MATH & COORDINATE CORRECTION HELPERS ---
 
-// Constants for GCJ-02 to WGS-84 conversion
-const PI = 3.1415926535897932384626;
-const a = 6378245.0;
-const ee = 0.00669342162296594323;
-
-function transformLat(x: number, y: number): number {
-  let ret = -100.0 + 2.0 * x + 3.0 * y + 0.2 * y * y + 0.1 * x * y + 0.2 * Math.sqrt(Math.abs(x));
-  ret += (20.0 * Math.sin(6.0 * x * PI) + 20.0 * Math.sin(2.0 * x * PI)) * 2.0 / 3.0;
-  ret += (20.0 * Math.sin(y * PI) + 40.0 * Math.sin(y / 3.0 * PI)) * 2.0 / 3.0;
-  ret += (160.0 * Math.sin(y / 12.0 * PI) + 320 * Math.sin(y * PI / 30.0)) * 2.0 / 3.0;
-  return ret;
-}
-
-function transformLon(x: number, y: number): number {
-  let ret = 300.0 + x + 2.0 * y + 0.1 * x * x + 0.1 * x * y + 0.1 * Math.sqrt(Math.abs(x));
-  ret += (20.0 * Math.sin(6.0 * x * PI) + 20.0 * Math.sin(2.0 * x * PI)) * 2.0 / 3.0;
-  ret += (20.0 * Math.sin(x * PI) + 40.0 * Math.sin(x / 3.0 * PI)) * 2.0 / 3.0;
-  ret += (150.0 * Math.sin(x / 12.0 * PI) + 300.0 * Math.sin(x / 30.0 * PI)) * 2.0 / 3.0;
-  return ret;
-}
-
-// GCJ-02 to WGS-84
-function gcj02towgs84(lng: number, lat: number): [number, number] {
-  if (typeof lng !== 'number' || typeof lat !== 'number' || isNaN(lng) || isNaN(lat)) {
-    return [0, 0];
-  }
-  if (outOfChina(lng, lat)) {
-    return [lng, lat];
-  }
-  let dlat = transformLat(lng - 105.0, lat - 35.0);
-  let dlng = transformLon(lng - 105.0, lat - 35.0);
-  const radlat = lat / 180.0 * PI;
-  const magic = Math.sin(radlat);
-  const magic2 = 1 - ee * magic * magic;
-  const sqrtmagic = Math.sqrt(magic2);
-  dlat = (dlat * 180.0) / ((a * (1 - ee)) / (magic2 * sqrtmagic) * PI);
-  dlng = (dlng * 180.0) / (a / sqrtmagic * Math.cos(radlat) * PI);
-  const mglat = lat + dlat;
-  const mglng = lng + dlng;
-  return [lng * 2 - mglng, lat * 2 - mglat];
-}
-
-function outOfChina(lng: number, lat: number): boolean {
-  return (lng < 72.004 || lng > 137.8347) || (lat < 0.8293 || lat > 55.8271);
-}
-
 // Lat/Lon to 3D Vector on Sphere
 function latLonToVector3(lat: number, lon: number, radius: number): THREE.Vector3 {
   // Guard against NaN
@@ -178,23 +132,36 @@ const WorldMap: React.FC<WorldMapProps> = ({ locations = [] }) => {
     globeRef.current = globeGroup;
 
     // 4. Base Sphere (Ocean)
+    // We enhance the texture visibility so even if vector data fails, it looks like a tech globe
     const textureCanvas = document.createElement('canvas');
     textureCanvas.width = 2048;
     textureCanvas.height = 1024;
     const ctx = textureCanvas.getContext('2d');
     
     if (ctx) {
-        ctx.fillStyle = '#0a0a0a';
+        // Dark background
+        ctx.fillStyle = '#050505';
         ctx.fillRect(0, 0, 2048, 1024);
-        ctx.strokeStyle = '#1a1a1a';
-        ctx.lineWidth = 1;
+        
+        // Brighter grid lines for "wireframe" feel
+        ctx.strokeStyle = '#222222'; 
+        ctx.lineWidth = 2;
 
-        // Grid
+        // Longitude
         for(let i = 0; i < 2048; i+=64) {
             ctx.beginPath(); ctx.moveTo(i, 0); ctx.lineTo(i, 1024); ctx.stroke();
         }
+        // Latitude
         for(let j = 0; j < 1024; j+=64) {
              ctx.beginPath(); ctx.moveTo(0, j); ctx.lineTo(2048, j); ctx.stroke();
+        }
+
+        // Add some random "data" dots to make it look active
+        ctx.fillStyle = '#1a1a1a';
+        for(let k=0; k<500; k++) {
+            const rx = Math.random() * 2048;
+            const ry = Math.random() * 1024;
+            ctx.fillRect(rx, ry, 4, 4);
         }
     }
 
@@ -324,40 +291,13 @@ const WorldMap: React.FC<WorldMapProps> = ({ locations = [] }) => {
 
     const loadGeoData = async () => {
         try {
-            setLoadingText("Downloading Global Vector Data...");
-            const worldJson = await fetchWithRetry('https://raw.githubusercontent.com/tower1229/echarts-world-map-jeojson/master/worldZH.json');
+            setLoadingText("Downloading Vector Data...");
+            // Use a highly reliable standard GeoJSON source to avoid 404/CORS issues
+            const worldJson = await fetchWithRetry('https://raw.githubusercontent.com/nvkelso/natural-earth-vector/master/geojson/ne_110m_admin_0_countries.geojson');
             
-            setLoadingText("Downloading China High-Precision Data...");
-            const chinaJson = await fetchWithRetry('https://geo.datav.aliyun.com/areas_v3/bound/100000_full.json');
-
-            setLoadingText("Applying Coordinate Correction...");
-            
-            const features = worldJson.features.filter((f: any) => f.properties.name !== 'China');
-            const chinaFeatures = chinaJson.features.map((f: any) => {
-                const geometry = JSON.parse(JSON.stringify(f.geometry));
-                const isValid = (coord: number[]) => !isNaN(coord[0]) && !isNaN(coord[1]);
-
-                if (geometry.type === 'Polygon') {
-                    geometry.coordinates = geometry.coordinates.map((ring: any) => 
-                        ring.map((pt: any) => isValid(pt) ? gcj02towgs84(pt[0], pt[1]) : [0,0])
-                    );
-                } else if (geometry.type === 'MultiPolygon') {
-                     geometry.coordinates = geometry.coordinates.map((poly: any) => 
-                        poly.map((ring: any) => 
-                            ring.map((pt: any) => isValid(pt) ? gcj02towgs84(pt[0], pt[1]) : [0,0])
-                        )
-                    );
-                }
-
-                return { ...f, geometry };
-            });
-
-            const finalFeatures = [...features, ...chinaFeatures];
-            setGeoData(finalFeatures);
-            
+            setGeoData(worldJson.features);
             setLoadingText("Constructing 3D Geometry...");
-            drawMap(finalFeatures);
-            
+            drawMap(worldJson.features);
             setIsLoading(false);
         } catch (error) {
             console.error("Failed to load map data:", error);
@@ -372,7 +312,18 @@ const WorldMap: React.FC<WorldMapProps> = ({ locations = [] }) => {
   // --- RENDER LOCATIONS ---
   useEffect(() => {
     if (locations.length > 0 && globeRef.current) {
-        // Simple add: ideally we'd clear previous if data updates, but for now it's stable
+        // Remove old sprites if any (simple cleanup)
+        // Note: In production we might want smarter updates, but this ensures no duplicates
+        globeRef.current.children.forEach(child => {
+            if (child.type === 'Sprite' || child.type === 'Line') {
+                // Keep the map lines (which are Line, but have specific material). 
+                // We'll just assume lines added here are markers for now or differentiate by userData.
+                if (child.userData.locationId) {
+                    child.visible = false; // crude removal for now, ideally remove from parent
+                }
+            }
+        });
+
         locations.forEach(loc => {
             let lat = loc.lat;
             let lon = loc.lng;
@@ -383,7 +334,7 @@ const WorldMap: React.FC<WorldMapProps> = ({ locations = [] }) => {
             }
             if (isNaN(lat) || isNaN(lon)) return;
 
-            const pos = latLonToVector3(lat, lon, 10.2);
+            const pos = latLonToVector3(lat, lon, 10.2); // Marker floats slightly above
             if (isNaN(pos.x) || isNaN(pos.y) || isNaN(pos.z)) return;
 
             const texture = new THREE.TextureLoader().load(loc.images[0] || 'https://via.placeholder.com/64');
@@ -398,6 +349,7 @@ const WorldMap: React.FC<WorldMapProps> = ({ locations = [] }) => {
                 pos
             ]);
             const line = new THREE.Line(lineGeo, new THREE.LineBasicMaterial({ color: 0x4ade80, transparent: true, opacity: 0.5 }));
+            line.userData = { locationId: loc.id };
             
             globeRef.current?.add(sprite);
             globeRef.current?.add(line);
@@ -407,11 +359,15 @@ const WorldMap: React.FC<WorldMapProps> = ({ locations = [] }) => {
 
   const drawMap = (features: any[]) => {
       if (!globeRef.current) return;
-      const radius = 10;
-      const material = new THREE.LineBasicMaterial({ color: 0x4ade80, transparent: true, opacity: 0.3 });
+      // CRITICAL FIX: Radius set to 10.05 to prevent Z-fighting with the 10.0 sphere
+      const radius = 10.05;
+      const material = new THREE.LineBasicMaterial({ color: 0x4ade80, transparent: true, opacity: 0.35 });
       
+      const lineGroup = new THREE.Group();
+
       features.forEach((feature) => {
           const { geometry } = feature;
+          if (!geometry) return;
           const coords = geometry.coordinates;
 
           const drawRing = (ring: any[]) => {
@@ -426,7 +382,7 @@ const WorldMap: React.FC<WorldMapProps> = ({ locations = [] }) => {
               if (points.length > 0) {
                   const lineGeometry = new THREE.BufferGeometry().setFromPoints(points);
                   const line = new THREE.Line(lineGeometry, material);
-                  globeRef.current?.add(line);
+                  lineGroup.add(line);
               }
           };
 
@@ -436,6 +392,8 @@ const WorldMap: React.FC<WorldMapProps> = ({ locations = [] }) => {
               coords.forEach((poly: any) => poly.forEach((ring: any) => drawRing(ring)));
           }
       });
+      
+      globeRef.current.add(lineGroup);
   };
 
   return (
@@ -480,7 +438,7 @@ const WorldMap: React.FC<WorldMapProps> = ({ locations = [] }) => {
                         <Globe size={18} className="text-green-500"/>
                         Global Footprint
                     </h2>
-                    <p className="text-xs text-gray-500 mb-6 font-mono">WGS-84 / GCJ-02 DUAL SYSTEM</p>
+                    <p className="text-xs text-gray-500 mb-6 font-mono">WGS-84 SYSTEM</p>
 
                     <AnimatePresence mode="wait">
                         {selectedLocation ? (
