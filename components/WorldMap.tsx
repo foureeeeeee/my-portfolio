@@ -1,8 +1,8 @@
-import React, { useEffect, useRef, useState, useMemo } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Search, MapPin, X, Globe, Upload, Maximize2, Calendar, Info } from 'lucide-react';
+import { MapPin, X, Globe, Maximize2, Calendar, ArrowLeft, Crosshair } from 'lucide-react';
 import { TravelLocation } from '../types';
 
 // --- MATH & COORDINATE CORRECTION HELPERS ---
@@ -67,42 +67,6 @@ function latLonToVector3(lat: number, lon: number, radius: number): THREE.Vector
   return new THREE.Vector3(x, y, z);
 }
 
-// Point in Polygon Ray Casting Algorithm
-function isPointInPolygon(point: [number, number], vs: [number, number][]): boolean {
-    const x = point[0], y = point[1];
-    let inside = false;
-    for (let i = 0, j = vs.length - 1; i < vs.length; j = i++) {
-        const xi = vs[i][0], yi = vs[i][1];
-        const xj = vs[j][0], yj = vs[j][1];
-        const intersect = ((yi > y) !== (yj > y)) &&
-            (x < (xj - xi) * (y - yi) / (yj - yi) + xi);
-        if (intersect) inside = !inside;
-    }
-    return inside;
-}
-
-// Get Bounding Box for optimized sampling
-function getBoundingBox(geometry: any) {
-  let minLng = 180, maxLng = -180, minLat = 90, maxLat = -90;
-
-  const updateBounds = (coords: any[]) => {
-      // If coordinate pair
-      if (typeof coords[0] === 'number' && typeof coords[1] === 'number') {
-          const lng = coords[0];
-          const lat = coords[1];
-          if (lng < minLng) minLng = lng;
-          if (lng > maxLng) maxLng = lng;
-          if (lat < minLat) minLat = lat;
-          if (lat > maxLat) maxLat = lat;
-      } else {
-          coords.forEach(updateBounds);
-      }
-  };
-
-  updateBounds(geometry.coordinates);
-  return { minLng, maxLng, minLat, maxLat };
-}
-
 // --- COMPONENT ---
 
 interface WorldMapProps {
@@ -123,14 +87,51 @@ const WorldMap: React.FC<WorldMapProps> = ({ locations = [] }) => {
   const [loadingText, setLoadingText] = useState("Initializing Systems...");
   
   // UI Interaction State
-  const [searchQuery, setSearchQuery] = useState("");
-  const [selectedRegion, setSelectedRegion] = useState<any | null>(null);
   const [selectedLocation, setSelectedLocation] = useState<TravelLocation | null>(null);
-  const [photos, setPhotos] = useState<{id: number, url: string, pos: THREE.Vector3}[]>([]);
-  
-  // Lightbox State
   const [lightboxImage, setLightboxImage] = useState<string | null>(null);
   
+  // Camera Animation Helpers
+  const flyToPosition = (targetPos: THREE.Vector3, distance = 25) => {
+    if (!cameraRef.current || !controlsRef.current) return;
+    
+    controlsRef.current.autoRotate = false;
+    
+    // Normalize direction and scale to desired distance
+    const finalPos = targetPos.clone().normalize().multiplyScalar(distance);
+
+    const startPos = cameraRef.current.position.clone();
+    const startTime = Date.now();
+    const duration = 1200;
+
+    const animateFly = () => {
+        const now = Date.now();
+        const p = Math.min((now - startTime) / duration, 1);
+        const ease = 1 - Math.pow(1 - p, 3); // Cubic ease out
+        
+        cameraRef.current?.position.copy(startPos).lerp(finalPos, ease);
+        cameraRef.current?.lookAt(0, 0, 0);
+
+        if (p < 1) requestAnimationFrame(animateFly);
+        else {
+            if (controlsRef.current) controlsRef.current.enabled = true;
+        }
+    };
+    animateFly();
+  };
+
+  const resetCamera = () => {
+      if (!cameraRef.current || !controlsRef.current) return;
+      controlsRef.current.autoRotate = true;
+      // Fly back to a general view
+      flyToPosition(new THREE.Vector3(0, 20, 45), 50);
+  };
+
+  const handleLocationSelect = (loc: TravelLocation) => {
+      setSelectedLocation(loc);
+      const pos = latLonToVector3(loc.lat, loc.lng, 10.2); // Target surface
+      flyToPosition(pos, 28); // Fly to zoom distance
+  };
+
   // --- INITIALIZATION ---
   useEffect(() => {
     if (!containerRef.current) return;
@@ -165,7 +166,7 @@ const WorldMap: React.FC<WorldMapProps> = ({ locations = [] }) => {
     controlsRef.current = controls;
 
     // 2. Lighting
-    const ambientLight = new THREE.AmbientLight(0xffffff, 0.6); // Soft white light
+    const ambientLight = new THREE.AmbientLight(0xffffff, 0.6); 
     scene.add(ambientLight);
     const pointLight = new THREE.PointLight(0xffffff, 1);
     pointLight.position.set(50, 50, 50);
@@ -176,35 +177,24 @@ const WorldMap: React.FC<WorldMapProps> = ({ locations = [] }) => {
     scene.add(globeGroup);
     globeRef.current = globeGroup;
 
-    // 4. Base Sphere (The Ocean) - Texture Resampling Implementation
+    // 4. Base Sphere (Ocean)
     const textureCanvas = document.createElement('canvas');
     textureCanvas.width = 2048;
     textureCanvas.height = 1024;
     const ctx = textureCanvas.getContext('2d');
     
     if (ctx) {
-        // Fill dark ocean
         ctx.fillStyle = '#0a0a0a';
         ctx.fillRect(0, 0, 2048, 1024);
-        
-        // Draw Projection Grid using Inverse Mercator Logic
         ctx.strokeStyle = '#1a1a1a';
         ctx.lineWidth = 1;
 
-        // Draw longitude lines
+        // Grid
         for(let i = 0; i < 2048; i+=64) {
-            ctx.beginPath();
-            ctx.moveTo(i, 0);
-            ctx.lineTo(i, 1024);
-            ctx.stroke();
+            ctx.beginPath(); ctx.moveTo(i, 0); ctx.lineTo(i, 1024); ctx.stroke();
         }
-
-        // Draw latitude lines
         for(let j = 0; j < 1024; j+=64) {
-             ctx.beginPath();
-             ctx.moveTo(0, j);
-             ctx.lineTo(2048, j);
-             ctx.stroke();
+             ctx.beginPath(); ctx.moveTo(0, j); ctx.lineTo(2048, j); ctx.stroke();
         }
     }
 
@@ -270,7 +260,6 @@ const WorldMap: React.FC<WorldMapProps> = ({ locations = [] }) => {
     };
     animate();
 
-    // Cleanup
     return () => {
         if (containerRef.current && rendererRef.current) {
             containerRef.current.removeChild(rendererRef.current.domElement);
@@ -296,7 +285,6 @@ const WorldMap: React.FC<WorldMapProps> = ({ locations = [] }) => {
         const raycaster = new THREE.Raycaster();
         raycaster.setFromCamera(mouse, cameraRef.current);
 
-        // Filter for Sprites only
         const sprites: THREE.Object3D[] = [];
         globeRef.current.traverse((child) => {
             if (child.type === 'Sprite') sprites.push(child);
@@ -309,36 +297,9 @@ const WorldMap: React.FC<WorldMapProps> = ({ locations = [] }) => {
             const location = locations.find(l => l.id === locId);
             
             if (location) {
-                // Fly to location
-                const pos = intersects[0].point.clone().normalize().multiplyScalar(25);
-                flyToPosition(pos);
-                setSelectedLocation(location);
-                setSelectedRegion(null); // Deselect region if any
+                handleLocationSelect(location);
             }
         }
-    };
-
-    const flyToPosition = (targetPos: THREE.Vector3) => {
-        if (!cameraRef.current || !controlsRef.current) return;
-        
-        controlsRef.current.autoRotate = false;
-        
-        const startPos = cameraRef.current.position.clone();
-        const startTime = Date.now();
-        const duration = 1200;
-
-        const animateFly = () => {
-            const now = Date.now();
-            const p = Math.min((now - startTime) / duration, 1);
-            const ease = 1 - Math.pow(1 - p, 3);
-            
-            cameraRef.current?.position.copy(startPos).lerp(targetPos, ease);
-            cameraRef.current?.lookAt(0, 0, 0);
-
-            if (p < 1) requestAnimationFrame(animateFly);
-            else controlsRef.current!.enabled = true;
-        };
-        animateFly();
     };
 
     containerRef.current?.addEventListener('click', handleMouseClick);
@@ -354,7 +315,6 @@ const WorldMap: React.FC<WorldMapProps> = ({ locations = [] }) => {
             return await response.json();
         } catch (error) {
             if (retries > 0) {
-                console.warn(`Fetch failed for ${url}, retrying... (${retries} left)`);
                 await new Promise(resolve => setTimeout(resolve, 1500));
                 return fetchWithRetry(url, retries - 1);
             }
@@ -365,9 +325,8 @@ const WorldMap: React.FC<WorldMapProps> = ({ locations = [] }) => {
     const loadGeoData = async () => {
         try {
             setLoadingText("Downloading Global Vector Data...");
-            // Use standard raw GitHub URL for better stability
             const worldJson = await fetchWithRetry('https://raw.githubusercontent.com/tower1229/echarts-world-map-jeojson/master/worldZH.json');
-
+            
             setLoadingText("Downloading China High-Precision Data...");
             const chinaJson = await fetchWithRetry('https://geo.datav.aliyun.com/areas_v3/bound/100000_full.json');
 
@@ -401,8 +360,7 @@ const WorldMap: React.FC<WorldMapProps> = ({ locations = [] }) => {
             
             setIsLoading(false);
         } catch (error) {
-            console.error("Failed to load map data after retries:", error);
-            // Graceful degradation: Stop loading so user can at least see the globe and markers
+            console.error("Failed to load map data:", error);
             setLoadingText("Vector data unavailable. Switching to Satellite Mode.");
             setTimeout(() => setIsLoading(false), 1500);
         }
@@ -414,9 +372,7 @@ const WorldMap: React.FC<WorldMapProps> = ({ locations = [] }) => {
   // --- RENDER LOCATIONS ---
   useEffect(() => {
     if (locations.length > 0 && globeRef.current) {
-        // Clear old markers if we re-run this (though locations usually stable)
-        // Ideally we group them and clear the group. For now assume additive is okay or clean up later.
-        
+        // Simple add: ideally we'd clear previous if data updates, but for now it's stable
         locations.forEach(loc => {
             let lat = loc.lat;
             let lon = loc.lng;
@@ -430,15 +386,13 @@ const WorldMap: React.FC<WorldMapProps> = ({ locations = [] }) => {
             const pos = latLonToVector3(lat, lon, 10.2);
             if (isNaN(pos.x) || isNaN(pos.y) || isNaN(pos.z)) return;
 
-            // Create Interactive Marker
             const texture = new THREE.TextureLoader().load(loc.images[0] || 'https://via.placeholder.com/64');
             const material = new THREE.SpriteMaterial({ map: texture, transparent: true });
             const sprite = new THREE.Sprite(material);
             sprite.position.copy(pos);
             sprite.scale.set(1.5, 1.5, 1.5);
-            sprite.userData = { locationId: loc.id }; // Important for raycasting
+            sprite.userData = { locationId: loc.id }; 
             
-            // Connecting line
             const lineGeo = new THREE.BufferGeometry().setFromPoints([
                 pos.clone().normalize().multiplyScalar(10),
                 pos
@@ -484,60 +438,6 @@ const WorldMap: React.FC<WorldMapProps> = ({ locations = [] }) => {
       });
   };
 
-  const flyToRegion = (feature: any) => {
-      if (!controlsRef.current || !cameraRef.current) return;
-      
-      let center = [0, 0];
-      if (feature.properties.center) {
-          center = feature.properties.center; 
-      } else {
-          const bbox = getBoundingBox(feature.geometry);
-          center = [(bbox.minLng + bbox.maxLng)/2, (bbox.minLat + bbox.maxLat)/2];
-      }
-
-      if(feature.properties.adcode && outOfChina(center[0], center[1]) === false) {
-           const bbox = getBoundingBox(feature.geometry);
-           center = [(bbox.minLng + bbox.maxLng)/2, (bbox.minLat + bbox.maxLat)/2];
-      }
-
-      const targetPos = latLonToVector3(center[1], center[0], 25); 
-
-      controlsRef.current.autoRotate = false;
-      const startPos = cameraRef.current.position.clone();
-      const duration = 1500;
-      const startTime = Date.now();
-
-      const animateFly = () => {
-          const now = Date.now();
-          const progress = Math.min((now - startTime) / duration, 1);
-          const ease = 1 - Math.pow(1 - progress, 3);
-
-          cameraRef.current?.position.copy(startPos).lerp(targetPos, ease);
-          cameraRef.current?.lookAt(0, 0, 0);
-
-          if (progress < 1) {
-              requestAnimationFrame(animateFly);
-          } else {
-              controlsRef.current!.enabled = true;
-          }
-      };
-
-      animateFly();
-      setSelectedRegion(feature);
-      setSelectedLocation(null); // Deselect location
-      setSearchQuery(feature.properties.name);
-  };
-
-  const filteredCountries = useMemo(() => {
-      if (!searchQuery || searchQuery.length < 1) return [];
-      return geoData
-        .filter(f => {
-            const name = f.properties.name || "";
-            return name.toLowerCase().includes(searchQuery.toLowerCase());
-        })
-        .slice(0, 5);
-  }, [searchQuery, geoData]);
-
   return (
     <section id="travel" className="relative w-full h-screen bg-[#050505] overflow-hidden">
         
@@ -568,47 +468,20 @@ const WorldMap: React.FC<WorldMapProps> = ({ locations = [] }) => {
         {/* --- UI LAYER --- */}
         <div className="ui-layer absolute inset-0 pointer-events-none">
             
-            {/* LEFT PANEL: Search & Selection */}
+            {/* LEFT PANEL: Logged Locations */}
             <motion.div 
                 className="absolute left-6 top-24 bottom-6 w-80 pointer-events-auto flex flex-col gap-4"
                 initial={{ x: -50, opacity: 0 }}
                 animate={{ x: 0, opacity: 1 }}
                 transition={{ delay: 0.5 }}
             >
-                <div className="bg-black/40 backdrop-blur-xl border border-white/10 rounded-2xl p-6 flex-1 flex flex-col shadow-2xl">
+                <div className="bg-black/40 backdrop-blur-xl border border-white/10 rounded-2xl p-6 flex-1 flex flex-col shadow-2xl relative overflow-hidden">
                     <h2 className="text-xl font-bold mb-1 flex items-center gap-2">
                         <Globe size={18} className="text-green-500"/>
                         Global Footprint
                     </h2>
                     <p className="text-xs text-gray-500 mb-6 font-mono">WGS-84 / GCJ-02 DUAL SYSTEM</p>
 
-                    {/* Search Input */}
-                    <div className="relative mb-6">
-                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={16} />
-                        <input 
-                            type="text" 
-                            value={searchQuery}
-                            onChange={(e) => setSearchQuery(e.target.value)}
-                            placeholder="Search World..."
-                            className="w-full bg-white/5 border border-white/10 rounded-lg pl-10 pr-4 py-3 text-sm focus:outline-none focus:border-green-500 transition-colors"
-                        />
-                        {filteredCountries.length > 0 && searchQuery !== selectedRegion?.properties.name && (
-                            <div className="absolute top-full left-0 w-full bg-gray-900/90 border border-white/10 mt-2 rounded-lg overflow-hidden z-20 max-h-60 overflow-y-auto">
-                                {filteredCountries.map((f, i) => (
-                                    <button
-                                        key={i}
-                                        onClick={() => flyToRegion(f)}
-                                        className="w-full text-left px-4 py-2 hover:bg-white/10 text-sm flex justify-between items-center"
-                                    >
-                                        <span>{f.properties.name}</span>
-                                        <span className="text-[10px] text-gray-500 font-mono uppercase">FLY_TO</span>
-                                    </button>
-                                ))}
-                            </div>
-                        )}
-                    </div>
-
-                    {/* Content Area for Region/Location */}
                     <AnimatePresence mode="wait">
                         {selectedLocation ? (
                             // LOCATION DETAIL CARD
@@ -619,11 +492,16 @@ const WorldMap: React.FC<WorldMapProps> = ({ locations = [] }) => {
                                 exit={{ opacity: 0, x: -20 }}
                                 className="flex-1 flex flex-col"
                             >
+                                <button 
+                                    onClick={() => { setSelectedLocation(null); resetCamera(); }}
+                                    className="flex items-center gap-2 text-xs text-gray-400 hover:text-white mb-4 transition-colors group"
+                                >
+                                    <ArrowLeft size={12} className="group-hover:-translate-x-1 transition-transform" />
+                                    RETURN TO ORBIT
+                                </button>
+
                                 <div className="flex justify-between items-start mb-4">
-                                    <h3 className="text-2xl font-bold text-white">{selectedLocation.name}</h3>
-                                    <button onClick={() => { setSelectedLocation(null); controlsRef.current!.autoRotate = true; }} className="p-1 hover:bg-white/10 rounded">
-                                        <X size={16} />
-                                    </button>
+                                    <h3 className="text-2xl font-bold text-white leading-none">{selectedLocation.name}</h3>
                                 </div>
                                 
                                 <div className="flex items-center gap-2 text-green-400 font-mono text-xs mb-4">
@@ -634,8 +512,8 @@ const WorldMap: React.FC<WorldMapProps> = ({ locations = [] }) => {
                                     <span>{selectedLocation.lat.toFixed(2)}, {selectedLocation.lng.toFixed(2)}</span>
                                 </div>
 
-                                <p className="text-gray-300 text-sm leading-relaxed mb-6">
-                                    {selectedLocation.description || "No description available for this coordinate."}
+                                <p className="text-gray-300 text-sm leading-relaxed mb-6 border-l-2 border-green-500/50 pl-3">
+                                    {selectedLocation.description || "No data logged for this sector."}
                                 </p>
 
                                 <div className="grid grid-cols-2 gap-2 mt-auto">
@@ -653,48 +531,33 @@ const WorldMap: React.FC<WorldMapProps> = ({ locations = [] }) => {
                                     ))}
                                 </div>
                             </motion.div>
-                        ) : selectedRegion ? (
-                            // REGION DETAIL CARD
-                            <motion.div 
-                                key="region"
-                                initial={{ opacity: 0 }}
-                                animate={{ opacity: 1 }}
-                                exit={{ opacity: 0 }}
-                                className="flex-1 flex flex-col"
-                            >
-                                <div className="flex justify-between items-start mb-4 border-b border-white/10 pb-4">
-                                    <div>
-                                        <h3 className="text-2xl font-bold text-white">{selectedRegion.properties.name}</h3>
-                                        <p className="text-green-400 text-xs font-mono mt-1">
-                                            REGION_ID: {selectedRegion.properties.adcode || 'UNK'}
-                                        </p>
-                                    </div>
-                                    <button onClick={() => { setSelectedRegion(null); setSearchQuery(''); controlsRef.current!.autoRotate = true; }} className="p-1 hover:bg-white/10 rounded">
-                                        <X size={16} />
-                                    </button>
-                                </div>
-                                <div className="flex-1 flex flex-col items-center justify-center text-center p-4 border border-dashed border-white/20 rounded-lg bg-white/5">
-                                    <div className="w-12 h-12 rounded-full bg-white/10 flex items-center justify-center mb-3">
-                                        <Upload size={20} className="text-gray-400" />
-                                    </div>
-                                    <p className="text-sm font-medium">Memory Slot Empty</p>
-                                    <p className="text-xs text-gray-500 mt-2">
-                                        Upload capability restricted in preview mode.
-                                    </p>
-                                </div>
-                            </motion.div>
                         ) : (
-                            // DEFAULT STATE
+                            // LOG LIST VIEW
                             <motion.div 
-                                key="empty"
-                                initial={{ opacity: 0 }}
-                                animate={{ opacity: 1 }}
-                                className="flex-1 flex flex-col items-center justify-center text-gray-600 space-y-4"
+                                key="list"
+                                initial={{ opacity: 0, x: 20 }}
+                                animate={{ opacity: 1, x: 0 }}
+                                exit={{ opacity: 0, x: 20 }}
+                                className="flex-1 flex flex-col overflow-hidden"
                             >
-                                <Globe size={48} className="opacity-20 text-green-500" />
-                                <div className="text-center">
-                                    <p className="text-sm text-gray-400 mb-1">Interactive Map System</p>
-                                    <p className="text-xs text-gray-600">Select markers or search regions</p>
+                                <div className="text-[10px] uppercase tracking-widest text-gray-500 mb-3 border-b border-white/10 pb-2">Mission Log</div>
+                                <div className="flex-1 overflow-y-auto custom-scrollbar pr-2 space-y-2">
+                                    {locations.map((loc) => (
+                                        <div 
+                                            key={loc.id}
+                                            onClick={() => handleLocationSelect(loc)}
+                                            className="p-3 bg-white/5 hover:bg-white/10 border border-white/5 hover:border-green-500/30 rounded cursor-pointer transition-all group"
+                                        >
+                                            <div className="flex justify-between items-center mb-1">
+                                                <span className="font-bold text-sm text-gray-200 group-hover:text-white">{loc.name}</span>
+                                                <Crosshair size={12} className="text-gray-600 group-hover:text-green-500" />
+                                            </div>
+                                            <div className="flex justify-between items-center text-[10px] text-gray-500 font-mono">
+                                                <span>{loc.date}</span>
+                                                <span>{loc.lat.toFixed(1)}, {loc.lng.toFixed(1)}</span>
+                                            </div>
+                                        </div>
+                                    ))}
                                 </div>
                             </motion.div>
                         )}
