@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, Plus, Trash2, Save, RotateCcw, Lock, MapPin, Search, Image as ImageIcon, Loader2, Globe } from 'lucide-react';
+import { X, Plus, Trash2, Save, RotateCcw, Lock, Search, Image as ImageIcon, Loader2, Globe, Download, Check, Copy } from 'lucide-react';
 import { AppData, savePortfolioData, resetPortfolioData } from '../utils/dataManager';
 import { Project, Experience, Award, TravelLocation } from '../types';
 
@@ -15,23 +15,39 @@ const AdminPortal: React.FC<AdminPortalProps> = ({ isOpen, onClose, data, onUpda
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [password, setPassword] = useState('');
   const [activeTab, setActiveTab] = useState<'projects' | 'experience' | 'awards' | 'travels'>('projects');
-  const [localData, setLocalData] = useState<AppData>(data);
+  
+  // Initialize with empty structure to satisfy type checker before useEffect runs
+  const [localData, setLocalData] = useState<AppData>({
+      projects: [],
+      experience: [],
+      awards: [],
+      travels: []
+  });
+  
   const [error, setError] = useState('');
+  const [showExport, setShowExport] = useState(false);
+  const [copySuccess, setCopySuccess] = useState(false);
   
   // Geocoding State
-  const [isSearching, setIsSearching] = useState<number | null>(null); // ID of item being searched
+  const [isSearching, setIsSearching] = useState<number | null>(null); 
   const mapPickerRef = useRef<HTMLDivElement>(null);
 
-  // Sync with prop data when opening
+  // Sync with prop data when opening, using DEEP CLONE to avoid reference issues
   useEffect(() => {
-    if (isOpen) {
-      setLocalData(data);
+    if (isOpen && data) {
+      try {
+          // JSON parse/stringify ensures we break all references to the original object
+          setLocalData(JSON.parse(JSON.stringify(data)));
+      } catch (e) {
+          console.error("Failed to clone data", e);
+          setLocalData(data);
+      }
     }
   }, [isOpen, data]);
 
   const handleLogin = (e: React.FormEvent) => {
     e.preventDefault();
-    if (password === 'admin') { // Simple mock authentication
+    if (password === 'admin') { 
       setIsAuthenticated(true);
       setError('');
     } else {
@@ -40,16 +56,33 @@ const AdminPortal: React.FC<AdminPortalProps> = ({ isOpen, onClose, data, onUpda
   };
 
   const handleSave = () => {
-    savePortfolioData(localData);
-    onUpdate(localData);
+    try {
+        savePortfolioData(localData);
+        onUpdate(localData);
+        alert("Changes saved to Local Browser Storage successfully.");
+    } catch (e) {
+        alert("Failed to save changes.");
+        console.error(e);
+    }
   };
 
   const handleReset = () => {
-    if (confirm('Are you sure you want to reset all data to default? This cannot be undone.')) {
+    if (confirm('WARNING: This will wipe all your custom edits and revert to the hardcoded defaults in dataManager.ts. Continue?')) {
       const defaults = resetPortfolioData();
       setLocalData(defaults);
       onUpdate(defaults);
     }
+  };
+
+  const handleExport = () => {
+      setShowExport(true);
+      setCopySuccess(false);
+  };
+
+  const copyToClipboard = () => {
+      navigator.clipboard.writeText(JSON.stringify(localData, null, 2));
+      setCopySuccess(true);
+      setTimeout(() => setCopySuccess(false), 2000);
   };
 
   const handleInputChange = (
@@ -72,7 +105,6 @@ const AdminPortal: React.FC<AdminPortalProps> = ({ isOpen, onClose, data, onUpda
       if (!query) return;
       setIsSearching(id);
       try {
-          // Using OpenStreetMap Nominatim API (Free, no key required for low volume)
           const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}`);
           const data = await res.json();
           
@@ -80,10 +112,8 @@ const AdminPortal: React.FC<AdminPortalProps> = ({ isOpen, onClose, data, onUpda
               const lat = parseFloat(data[0].lat);
               const lon = parseFloat(data[0].lon);
               
-              // Calculate rough X/Y for the 2D map preview (Equirectangular approximation)
-              // Longitude (-180 to 180) -> X (0 to 100)
+              // Approx projection for 2D map preview
               const x = ((lon + 180) / 360) * 100;
-              // Latitude (90 to -90) -> Y (0 to 100)
               const y = ((90 - lat) / 180) * 100;
 
               setLocalData(prev => ({
@@ -240,6 +270,32 @@ const AdminPortal: React.FC<AdminPortalProps> = ({ isOpen, onClose, data, onUpda
               </button>
             </form>
           </div>
+        ) : showExport ? (
+             <div className="flex-1 p-8 overflow-hidden flex flex-col">
+                <div className="flex justify-between items-center mb-6">
+                    <div>
+                        <h3 className="text-2xl font-bold mb-1">Export Configuration</h3>
+                        <p className="text-gray-400 text-sm">Copy this JSON and update <code className="bg-white/10 px-1 rounded text-green-400">utils/dataManager.ts</code> to make changes permanent in your codebase.</p>
+                    </div>
+                    <button onClick={() => setShowExport(false)} className="text-gray-400 hover:text-white">
+                        <X size={24} />
+                    </button>
+                </div>
+                <div className="flex-1 bg-black/50 border border-white/10 rounded p-4 relative overflow-hidden">
+                    <textarea 
+                        readOnly 
+                        className="w-full h-full bg-transparent text-xs font-mono text-gray-300 focus:outline-none resize-none"
+                        value={JSON.stringify(localData, null, 2)}
+                    />
+                    <button 
+                        onClick={copyToClipboard}
+                        className="absolute top-4 right-4 flex items-center gap-2 px-4 py-2 bg-white text-black rounded font-medium hover:bg-gray-200 transition-colors shadow-lg"
+                    >
+                        {copySuccess ? <Check size={16} /> : <Copy size={16} />}
+                        {copySuccess ? "Copied!" : "Copy JSON"}
+                    </button>
+                </div>
+             </div>
         ) : (
           <div className="flex-1 flex overflow-hidden">
             {/* Sidebar */}
@@ -263,10 +319,16 @@ const AdminPortal: React.FC<AdminPortalProps> = ({ isOpen, onClose, data, onUpda
                   <Save size={16} /> Save Changes
                 </button>
                 <button 
-                  onClick={handleReset}
-                  className="flex items-center justify-center gap-2 bg-red-600/10 text-red-400 border border-red-600/20 py-2 rounded hover:bg-red-600/20 transition-all text-xs"
+                  onClick={handleExport}
+                  className="flex items-center justify-center gap-2 bg-blue-600/20 text-blue-400 border border-blue-600/30 py-2 rounded hover:bg-blue-600/30 transition-all text-sm"
                 >
-                  <RotateCcw size={14} /> Reset Data
+                   <Download size={16} /> Export JSON
+                </button>
+                <button 
+                  onClick={handleReset}
+                  className="flex items-center justify-center gap-2 bg-red-600/10 text-red-400 border border-red-600/20 py-2 rounded hover:bg-red-600/20 transition-all text-xs mt-2"
+                >
+                  <RotateCcw size={14} /> Reset to Default
                 </button>
               </div>
             </div>
@@ -285,7 +347,7 @@ const AdminPortal: React.FC<AdminPortalProps> = ({ isOpen, onClose, data, onUpda
 
               <div className="space-y-6">
                 <AnimatePresence>
-                  {localData[activeTab].map((item: any) => (
+                  {localData[activeTab]?.map((item: any) => (
                     <motion.div 
                       key={item.id}
                       layout
@@ -410,10 +472,9 @@ const AdminPortal: React.FC<AdminPortalProps> = ({ isOpen, onClose, data, onUpda
                           </>
                         )}
 
-                        {/* --- TRAVELS (REFINED) --- */}
+                        {/* --- TRAVELS --- */}
                         {activeTab === 'travels' && (
                            <>
-                              {/* 1. Basic Info Row */}
                               <div className="col-span-2 md:col-span-1">
                                 <label className="text-xs text-gray-500 block mb-1">Location Name</label>
                                 <div className="flex gap-2">
@@ -434,7 +495,7 @@ const AdminPortal: React.FC<AdminPortalProps> = ({ isOpen, onClose, data, onUpda
                                 />
                               </div>
 
-                              {/* 2. Location Manager Row */}
+                              {/* Location Manager Row */}
                               <div className="col-span-2 bg-black/20 rounded p-4 border border-white/5 my-2">
                                   <div className="flex items-center gap-2 mb-3">
                                       <Globe size={14} className="text-blue-400" />
@@ -445,7 +506,6 @@ const AdminPortal: React.FC<AdminPortalProps> = ({ isOpen, onClose, data, onUpda
                                       <input 
                                           className="flex-1 bg-white/5 border border-white/10 rounded px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
                                           placeholder="Search city for auto-coordinates..."
-                                          // Note: We use the item name as initial search, but user can type here
                                           onKeyDown={(e) => {
                                               if (e.key === 'Enter') handleAutoLocate(item.id, (e.target as HTMLInputElement).value);
                                           }}
@@ -480,7 +540,6 @@ const AdminPortal: React.FC<AdminPortalProps> = ({ isOpen, onClose, data, onUpda
                                   </div>
                               </div>
                               
-                              {/* 3. Description */}
                               <div className="col-span-2">
                                 <label className="text-xs text-gray-500 block mb-1">Description</label>
                                 <textarea 
@@ -490,7 +549,6 @@ const AdminPortal: React.FC<AdminPortalProps> = ({ isOpen, onClose, data, onUpda
                                 />
                               </div>
 
-                              {/* 4. Visual Image Manager */}
                               <div className="col-span-2">
                                 <label className="text-xs text-gray-500 block mb-2">Photo Gallery</label>
                                 <div className="space-y-2">
@@ -523,28 +581,24 @@ const AdminPortal: React.FC<AdminPortalProps> = ({ isOpen, onClose, data, onUpda
                                 </div>
                               </div>
 
-                              {/* 5. Map Preview (Read Only / Visual check) */}
                               <div className="col-span-2 mt-2">
                                 <label className="text-xs text-gray-500 block mb-2">Location Visual Check</label>
                                 <div 
                                     ref={mapPickerRef}
                                     className="relative w-full aspect-[2/1] bg-black border border-white/20 rounded cursor-crosshair overflow-hidden group/map"
-                                    // Keeping manual override just in case, but usually search is better
                                     onClick={(e) => handleMapClick(e, item.id)}
                                 >
-                                     {/* Map Background for Reference */}
                                     <img 
                                         src="https://upload.wikimedia.org/wikipedia/commons/thumb/a/a3/World_map_blank_black_lines_4500px_monochrome.png/800px-World_map_blank_black_lines_4500px_monochrome.png" 
                                         className="absolute inset-0 w-full h-full object-cover opacity-50 pointer-events-none"
                                         alt="map reference"
                                     />
-                                    {/* The Dot */}
                                     <div 
                                         className="absolute w-3 h-3 bg-yellow-500 rounded-full border border-white -ml-1.5 -mt-1.5 shadow-[0_0_10px_yellow]"
                                         style={{ left: `${item.x}%`, top: `${item.y}%` }}
                                     />
                                     <div className="absolute bottom-2 right-2 text-[10px] bg-black/80 px-2 py-1 rounded text-gray-400 pointer-events-none">
-                                        Click map to manually override
+                                        Click map to override
                                     </div>
                                 </div>
                               </div>

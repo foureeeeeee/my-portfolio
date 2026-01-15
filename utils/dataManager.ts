@@ -125,63 +125,54 @@ const DEFAULT_TRAVELS: TravelLocation[] = [
 
 const STORAGE_KEY = 'zu_portfolio_data_v1';
 
+// Default State in Code
+const DEFAULT_DATA: AppData = {
+    projects: DEFAULT_PROJECTS,
+    experience: DEFAULT_EXPERIENCE,
+    awards: DEFAULT_AWARDS,
+    travels: DEFAULT_TRAVELS
+};
+
 export const getPortfolioData = (): AppData => {
   try {
     const stored = localStorage.getItem(STORAGE_KEY);
     if (stored) {
       const data = JSON.parse(stored);
       
-      // Data migration/normalization for older saves
-      if (!data.travels) data.travels = DEFAULT_TRAVELS;
-      data.travels = data.travels.map((t: any) => {
-         // Fix NaN issues: Ensure lat/lng are numbers
-         let lat = t.lat;
-         let lng = t.lng;
-
-         // Legacy migration
-         if (lat === undefined && t.x !== undefined) {
-             lng = (t.x / 100) * 360 - 180;
-             lat = 90 - (t.y / 100) * 180;
-         }
-
-         // Fallback to 0,0 if invalid
-         if (typeof lat !== 'number' || isNaN(lat)) lat = 0;
-         if (typeof lng !== 'number' || isNaN(lng)) lng = 0;
-
-         return {
-             ...t,
-             lat,
-             lng
-         };
-      });
-
-      return data;
+      // Robust Check: Ensure all sections exist, if not merge with defaults
+      // This helps if we add new sections in code later
+      return {
+          projects: data.projects || DEFAULT_DATA.projects,
+          experience: data.experience || DEFAULT_DATA.experience,
+          awards: data.awards || DEFAULT_DATA.awards,
+          travels: data.travels || DEFAULT_DATA.travels
+      };
     }
   } catch (e) {
     console.error("Failed to load portfolio data", e);
   }
-  return {
-    projects: DEFAULT_PROJECTS,
-    experience: DEFAULT_EXPERIENCE,
-    awards: DEFAULT_AWARDS,
-    travels: DEFAULT_TRAVELS
-  };
+  // Return a copy to avoid mutation reference issues
+  return JSON.parse(JSON.stringify(DEFAULT_DATA));
 };
 
 export const savePortfolioData = (data: AppData) => {
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+    console.log("Data saved to Local Storage:", STORAGE_KEY);
   } catch (e) {
     console.error("Failed to save portfolio data", e);
+    throw e;
   }
 };
 
 export const resetPortfolioData = () => {
-  localStorage.removeItem(STORAGE_KEY);
-  return {
-    projects: DEFAULT_PROJECTS,
-    experience: DEFAULT_EXPERIENCE,
-    awards: DEFAULT_AWARDS,
-    travels: DEFAULT_TRAVELS
-  };
+  try {
+    localStorage.removeItem(STORAGE_KEY);
+    console.log("Local Storage cleared. Reverting to code defaults.");
+    // Return a fresh copy of defaults
+    return JSON.parse(JSON.stringify(DEFAULT_DATA));
+  } catch (e) {
+    console.error("Failed to reset data", e);
+    return DEFAULT_DATA;
+  }
 };
