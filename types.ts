@@ -31,7 +31,10 @@ export interface TravelLocation {
   id: number;
   name: string;
   date: string;
-  x: number; // Percentage 0-100
-  y: number; // Percentage 0-100
+  lat: number; // Latitude -90 to 90
+  lng: number; // Longitude -180 to 180
+  x?: number; // Keep for backward compatibility if needed
+  y?: number; // Keep for backward compatibility if needed
   images: string[];
+  description?: string;
 }

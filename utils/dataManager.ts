@@ -77,8 +77,9 @@ const DEFAULT_TRAVELS: TravelLocation[] = [
     id: 1,
     name: "Tokyo, Japan",
     date: "2023",
-    x: 85,
-    y: 35,
+    lat: 35.6762,
+    lng: 139.6503,
+    description: "Exploring the neon streets of Shinjuku and traditional temples.",
     images: [
       "https://images.unsplash.com/photo-1540959733332-eab4deabeeaf?q=80&w=1000",
       "https://images.unsplash.com/photo-1503899036084-c55cdd92da26?q=80&w=1000",
@@ -89,8 +90,9 @@ const DEFAULT_TRAVELS: TravelLocation[] = [
     id: 2,
     name: "Reykjavik, Iceland",
     date: "2022",
-    x: 44,
-    y: 18,
+    lat: 64.1466,
+    lng: -21.9426,
+    description: "Chasing the Northern Lights and walking on black sand beaches.",
     images: [
       "https://images.unsplash.com/photo-1476610182048-b716b8518aae?q=80&w=1000",
       "https://images.unsplash.com/photo-1521651201144-634ffa7f6bf2?q=80&w=1000"
@@ -100,11 +102,23 @@ const DEFAULT_TRAVELS: TravelLocation[] = [
     id: 3,
     name: "Paris, France",
     date: "2021",
-    x: 49,
-    y: 28,
+    lat: 48.8566,
+    lng: 2.3522,
+    description: "Art, history, and coffee in the City of Light.",
     images: [
       "https://images.unsplash.com/photo-1502602898657-3e91760cbb34?q=80&w=1000",
       "https://images.unsplash.com/photo-1499856871940-a09627c6d7db?q=80&w=1000"
+    ]
+  },
+  {
+    id: 4,
+    name: "New York, USA",
+    date: "2020",
+    lat: 40.7128,
+    lng: -74.0060,
+    description: "The city that never sleeps. Urban photography tour.",
+    images: [
+      "https://images.unsplash.com/photo-1496442226666-8d4a0e62e6e9?q=80&w=1000"
     ]
   }
 ];
@@ -116,8 +130,31 @@ export const getPortfolioData = (): AppData => {
     const stored = localStorage.getItem(STORAGE_KEY);
     if (stored) {
       const data = JSON.parse(stored);
-      // Ensure backwards compatibility if travels doesn't exist in stored data
+      
+      // Data migration/normalization for older saves
       if (!data.travels) data.travels = DEFAULT_TRAVELS;
+      data.travels = data.travels.map((t: any) => {
+         // Fix NaN issues: Ensure lat/lng are numbers
+         let lat = t.lat;
+         let lng = t.lng;
+
+         // Legacy migration
+         if (lat === undefined && t.x !== undefined) {
+             lng = (t.x / 100) * 360 - 180;
+             lat = 90 - (t.y / 100) * 180;
+         }
+
+         // Fallback to 0,0 if invalid
+         if (typeof lat !== 'number' || isNaN(lat)) lat = 0;
+         if (typeof lng !== 'number' || isNaN(lng)) lng = 0;
+
+         return {
+             ...t,
+             lat,
+             lng
+         };
+      });
+
       return data;
     }
   } catch (e) {

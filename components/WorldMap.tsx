@@ -1,439 +1,733 @@
 import React, { useEffect, useRef, useState, useMemo } from 'react';
-import { motion, AnimatePresence, useScroll, useVelocity, useSpring, useTransform } from 'framer-motion';
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { motion, AnimatePresence } from 'framer-motion';
+import { Search, Image as ImageIcon, MapPin, X, Globe, Upload } from 'lucide-react';
 import { TravelLocation } from '../types';
-import { X, ChevronLeft, ChevronRight, Globe } from 'lucide-react';
+
+// --- MATH & COORDINATE CORRECTION HELPERS ---
+
+// Constants for GCJ-02 to WGS-84 conversion
+const PI = 3.1415926535897932384626;
+const a = 6378245.0;
+const ee = 0.00669342162296594323;
+
+function transformLat(x: number, y: number): number {
+  let ret = -100.0 + 2.0 * x + 3.0 * y + 0.2 * y * y + 0.1 * x * y + 0.2 * Math.sqrt(Math.abs(x));
+  ret += (20.0 * Math.sin(6.0 * x * PI) + 20.0 * Math.sin(2.0 * x * PI)) * 2.0 / 3.0;
+  ret += (20.0 * Math.sin(y * PI) + 40.0 * Math.sin(y / 3.0 * PI)) * 2.0 / 3.0;
+  ret += (160.0 * Math.sin(y / 12.0 * PI) + 320 * Math.sin(y * PI / 30.0)) * 2.0 / 3.0;
+  return ret;
+}
+
+function transformLon(x: number, y: number): number {
+  let ret = 300.0 + x + 2.0 * y + 0.1 * x * x + 0.1 * x * y + 0.1 * Math.sqrt(Math.abs(x));
+  ret += (20.0 * Math.sin(6.0 * x * PI) + 20.0 * Math.sin(2.0 * x * PI)) * 2.0 / 3.0;
+  ret += (20.0 * Math.sin(x * PI) + 40.0 * Math.sin(x / 3.0 * PI)) * 2.0 / 3.0;
+  ret += (150.0 * Math.sin(x / 12.0 * PI) + 300.0 * Math.sin(x / 30.0 * PI)) * 2.0 / 3.0;
+  return ret;
+}
+
+// GCJ-02 to WGS-84
+function gcj02towgs84(lng: number, lat: number): [number, number] {
+  if (typeof lng !== 'number' || typeof lat !== 'number' || isNaN(lng) || isNaN(lat)) {
+    return [0, 0];
+  }
+  if (outOfChina(lng, lat)) {
+    return [lng, lat];
+  }
+  let dlat = transformLat(lng - 105.0, lat - 35.0);
+  let dlng = transformLon(lng - 105.0, lat - 35.0);
+  const radlat = lat / 180.0 * PI;
+  const magic = Math.sin(radlat);
+  const magic2 = 1 - ee * magic * magic;
+  const sqrtmagic = Math.sqrt(magic2);
+  dlat = (dlat * 180.0) / ((a * (1 - ee)) / (magic2 * sqrtmagic) * PI);
+  dlng = (dlng * 180.0) / (a / sqrtmagic * Math.cos(radlat) * PI);
+  const mglat = lat + dlat;
+  const mglng = lng + dlng;
+  return [lng * 2 - mglng, lat * 2 - mglat];
+}
+
+function outOfChina(lng: number, lat: number): boolean {
+  return (lng < 72.004 || lng > 137.8347) || (lat < 0.8293 || lat > 55.8271);
+}
+
+// Lat/Lon to 3D Vector on Sphere
+function latLonToVector3(lat: number, lon: number, radius: number): THREE.Vector3 {
+  // Guard against NaN
+  if (typeof lat !== 'number' || isNaN(lat)) lat = 0;
+  if (typeof lon !== 'number' || isNaN(lon)) lon = 0;
+
+  const phi = (90 - lat) * (Math.PI / 180);
+  const theta = (lon + 180) * (Math.PI / 180);
+  const x = -(radius * Math.sin(phi) * Math.cos(theta));
+  const z = (radius * Math.sin(phi) * Math.sin(theta));
+  const y = (radius * Math.cos(phi));
+  return new THREE.Vector3(x, y, z);
+}
+
+// Point in Polygon Ray Casting Algorithm
+function isPointInPolygon(point: [number, number], vs: [number, number][]): boolean {
+    const x = point[0], y = point[1];
+    let inside = false;
+    for (let i = 0, j = vs.length - 1; i < vs.length; j = i++) {
+        const xi = vs[i][0], yi = vs[i][1];
+        const xj = vs[j][0], yj = vs[j][1];
+        const intersect = ((yi > y) !== (yj > y)) &&
+            (x < (xj - xi) * (y - yi) / (yj - yi) + xi);
+        if (intersect) inside = !inside;
+    }
+    return inside;
+}
+
+// Get Bounding Box for optimized sampling
+function getBoundingBox(geometry: any) {
+  let minLng = 180, maxLng = -180, minLat = 90, maxLat = -90;
+
+  const updateBounds = (coords: any[]) => {
+      // If coordinate pair
+      if (typeof coords[0] === 'number' && typeof coords[1] === 'number') {
+          const lng = coords[0];
+          const lat = coords[1];
+          if (lng < minLng) minLng = lng;
+          if (lng > maxLng) maxLng = lng;
+          if (lat < minLat) minLat = lat;
+          if (lat > maxLat) maxLat = lat;
+      } else {
+          coords.forEach(updateBounds);
+      }
+  };
+
+  updateBounds(geometry.coordinates);
+  return { minLng, maxLng, minLat, maxLat };
+}
+
+// --- COMPONENT ---
 
 interface WorldMapProps {
-  locations: TravelLocation[];
+  locations?: TravelLocation[];
 }
 
-interface Point3D {
-  x: number;
-  y: number;
-  z: number;
-  baseX: number;
-  baseY: number;
-  baseZ: number;
-  lat: number;
-  lon: number;
-}
-
-const WorldMap: React.FC<WorldMapProps> = ({ locations }) => {
+const WorldMap: React.FC<WorldMapProps> = ({ locations = [] }) => {
   const containerRef = useRef<HTMLDivElement>(null);
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-  const [selectedLocation, setSelectedLocation] = useState<TravelLocation | null>(null);
-  const [activeImageIndex, setActiveImageIndex] = useState(0);
-
-  // --- Scroll & Mouse Interaction Hooks ---
-  const { scrollY } = useScroll();
-  const scrollVelocity = useVelocity(scrollY);
-  const smoothVelocity = useSpring(scrollVelocity, { damping: 50, stiffness: 400 });
+  const rendererRef = useRef<THREE.WebGLRenderer | null>(null);
+  const sceneRef = useRef<THREE.Scene | null>(null);
+  const cameraRef = useRef<THREE.PerspectiveCamera | null>(null);
+  const controlsRef = useRef<OrbitControls | null>(null);
+  const globeRef = useRef<THREE.Group | null>(null);
   
-  // Convert 2D Map coordinates (0-100%) to Spherical Lat/Lon for the globe
-  // Approximation: Map X (0-100) to Lon (-180 to 180), Map Y (0-100) to Lat (90 to -90)
-  const mappedLocations = useMemo(() => {
-    return locations.map(loc => {
-        // Simple linear mapping for demo purposes. 
-        // Real apps might use actual lat/lon coordinates.
-        const lon = (loc.x / 100) * 360 - 180; 
-        const lat = ((loc.y / 100) * 180 - 90) * -1;
-        return { ...loc, lat, lon };
-    });
-  }, [locations]);
-
-  // Track projected 2D positions of the pins to render HTML buttons on top of Canvas
-  const [projectedPins, setProjectedPins] = useState<{id: number, x: number, y: number, z: number, opacity: number}[]>([]);
-
+  // Data State
+  const [geoData, setGeoData] = useState<any[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [loadingText, setLoadingText] = useState("Initializing Systems...");
+  
+  // UI Interaction State
+  const [searchQuery, setSearchQuery] = useState("");
+  const [selectedRegion, setSelectedRegion] = useState<any | null>(null);
+  const [photos, setPhotos] = useState<{id: number, url: string, pos: THREE.Vector3}[]>([]);
+  
+  // --- INITIALIZATION ---
   useEffect(() => {
-    const canvas = canvasRef.current;
-    const container = containerRef.current;
-    if (!canvas || !container) return;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
+    if (!containerRef.current) return;
 
-    let width = container.offsetWidth;
-    let height = container.offsetHeight;
-    canvas.width = width;
-    canvas.height = height;
+    // 1. Scene Setup
+    const width = containerRef.current.offsetWidth;
+    const height = containerRef.current.offsetHeight;
 
-    // --- GLOBE CONFIG ---
-    const GLOBE_RADIUS = Math.min(width, height) * 0.35;
-    const DOT_COUNT = 1200;
-    const DOT_SIZE = 1.5;
-    const PROJECTION_CENTER_X = width / 2;
-    const PROJECTION_CENTER_Y = height / 2;
-    const PERSPECTIVE = width * 0.8; // Field of view
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x050505);
+    scene.fog = new THREE.FogExp2(0x050505, 0.002);
+    sceneRef.current = scene;
 
-    // --- GENERATE SPHERE POINTS (Fibonacci Sphere) ---
-    const spherePoints: Point3D[] = [];
-    const phi = Math.PI * (3 - Math.sqrt(5)); // Golden angle
+    const camera = new THREE.PerspectiveCamera(45, width / height, 0.1, 1000);
+    camera.position.set(0, 20, 45); // Initial view
+    cameraRef.current = camera;
 
-    for (let i = 0; i < DOT_COUNT; i++) {
-      const y = 1 - (i / (DOT_COUNT - 1)) * 2; // y goes from 1 to -1
-      const radius = Math.sqrt(1 - y * y); // radius at y
-      const theta = phi * i; // golden angle increment
+    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+    renderer.setSize(width, height);
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    containerRef.current.appendChild(renderer.domElement);
+    rendererRef.current = renderer;
 
-      const x = Math.cos(theta) * radius;
-      const z = Math.sin(theta) * radius;
+    const controls = new OrbitControls(camera, renderer.domElement);
+    controls.enableDamping = true;
+    controls.dampingFactor = 0.05;
+    controls.enablePan = false;
+    controls.minDistance = 12;
+    controls.maxDistance = 60;
+    controls.autoRotate = true;
+    controls.autoRotateSpeed = 0.5;
+    controlsRef.current = controls;
 
-      spherePoints.push({
-        x: x * GLOBE_RADIUS,
-        y: y * GLOBE_RADIUS,
-        z: z * GLOBE_RADIUS,
-        baseX: x * GLOBE_RADIUS,
-        baseY: y * GLOBE_RADIUS,
-        baseZ: z * GLOBE_RADIUS,
-        lat: 0, 
-        lon: 0
-      });
-    }
+    // 2. Lighting
+    const ambientLight = new THREE.AmbientLight(0xffffff, 0.6); // Soft white light
+    scene.add(ambientLight);
+    const pointLight = new THREE.PointLight(0xffffff, 1);
+    pointLight.position.set(50, 50, 50);
+    scene.add(pointLight);
 
-    // --- STATE ---
-    let rotation = { x: 0, y: 4.5 }; // Initial rotation
-    let mouse = { x: 0, y: 0 };
-    let targetRotation = { x: 0, y: 0 };
-    let animationFrameId: number;
+    // 3. Globe Group
+    const globeGroup = new THREE.Group();
+    scene.add(globeGroup);
+    globeRef.current = globeGroup;
 
-    const render = () => {
-      // Clear
-      ctx.fillStyle = '#020202'; // Match background
-      ctx.fillRect(0, 0, width, height);
+    // 4. Base Sphere (The Ocean) - Texture Resampling Implementation
+    const textureCanvas = document.createElement('canvas');
+    textureCanvas.width = 2048;
+    textureCanvas.height = 1024;
+    const ctx = textureCanvas.getContext('2d');
+    
+    if (ctx) {
+        // Fill dark ocean
+        ctx.fillStyle = '#0a0a0a';
+        ctx.fillRect(0, 0, 2048, 1024);
+        
+        // Draw Projection Grid using Inverse Mercator Logic
+        // We simulate re-projecting a grid to prove alignment math
+        ctx.strokeStyle = '#1a1a1a';
+        ctx.lineWidth = 1;
 
-      // 1. Calculate Rotation
-      // Base rotation
-      rotation.y += 0.002; 
-      
-      // Scroll velocity influence (spin faster when scrolling)
-      const velocity = smoothVelocity.get();
-      rotation.y += velocity * 0.00005;
-
-      // Mouse interaction (Tilt)
-      targetRotation.x = (mouse.y / height - 0.5) * 1; 
-      targetRotation.y = (mouse.x / width - 0.5) * 1;
-      
-      // Ease into mouse position (super subtle additional rotation)
-      rotation.x += (targetRotation.x - rotation.x) * 0.05;
-      
-      const cx = Math.cos(rotation.x);
-      const sx = Math.sin(rotation.x);
-      const cy = Math.cos(rotation.y);
-      const sy = Math.sin(rotation.y);
-
-      // 2. Project & Draw Sphere Dots
-      ctx.fillStyle = 'rgba(255, 255, 255, 0.4)';
-      
-      spherePoints.forEach(point => {
-        // 3D Rotation Math
-        let x = point.baseX;
-        let y = point.baseY;
-        let z = point.baseZ;
-
-        // Rotation around X-axis
-        let yt = y * cx - z * sx;
-        let zt = y * sx + z * cx;
-        y = yt;
-        z = zt;
-
-        // Rotation around Y-axis
-        let xt = x * cy - z * sy;
-        zt = x * sy + z * cy;
-        x = xt;
-        z = zt;
-
-        // Projection (3D -> 2D)
-        const scale = PERSPECTIVE / (PERSPECTIVE + z);
-        const x2d = (x * scale) + PROJECTION_CENTER_X;
-        const y2d = (y * scale) + PROJECTION_CENTER_Y;
-
-        // Draw only if visible (simple z-culling, though not strictly necessary for points, looks cleaner)
-        if (scale > 0 && z < GLOBE_RADIUS) {
-            // Depth fading
-            const alpha = Math.max(0, (scale - 0.5) * 0.6); 
-            ctx.fillStyle = `rgba(255, 255, 255, ${alpha})`;
-            
+        // Draw longitude lines (Equirectangular is linear X)
+        for(let i = 0; i < 2048; i+=64) {
             ctx.beginPath();
-            ctx.arc(x2d, y2d, DOT_SIZE * scale, 0, Math.PI * 2);
-            ctx.fill();
+            ctx.moveTo(i, 0);
+            ctx.lineTo(i, 1024);
+            ctx.stroke();
         }
-      });
 
-      // 3. Calculate Pin Positions for HTML Overlay
-      const newPinPositions = mappedLocations.map(loc => {
-          // Convert Lat/Lon to 3D Cartesian
-          const latRad = (loc.lat * Math.PI) / 180;
-          const lonRad = (-loc.lon * Math.PI) / 180; // Invert lon for correct direction
+        // Draw latitude lines
+        for(let j = 0; j < 1024; j+=64) {
+             ctx.beginPath();
+             ctx.moveTo(0, j);
+             ctx.lineTo(2048, j);
+             ctx.stroke();
+        }
+    }
 
-          const r = GLOBE_RADIUS;
-          let x = r * Math.cos(latRad) * Math.cos(lonRad);
-          let y = r * Math.sin(latRad);
-          let z = r * Math.cos(latRad) * Math.sin(lonRad);
+    const sphereTexture = new THREE.CanvasTexture(textureCanvas);
+    const sphereGeometry = new THREE.SphereGeometry(10, 64, 64);
+    const sphereMaterial = new THREE.MeshPhongMaterial({
+        map: sphereTexture,
+        color: 0x111111,
+        specular: 0x222222,
+        shininess: 15,
+        transparent: true,
+        opacity: 0.95
+    });
+    const sphere = new THREE.Mesh(sphereGeometry, sphereMaterial);
+    globeGroup.add(sphere);
 
-          // Apply same rotation as globe
-          // X-axis
-          let yt = y * cx - z * sx;
-          let zt = y * sx + z * cx;
-          y = yt;
-          z = zt;
+    // 5. Atmosphere Glow
+    const haloGeometry = new THREE.SphereGeometry(10.2, 64, 64);
+    const haloMaterial = new THREE.ShaderMaterial({
+        uniforms: {
+            c: { value: 0.5 },
+            p: { value: 4.0 },
+            glowColor: { value: new THREE.Color(0x22c55e) },
+            viewVector: { value: new THREE.Vector3(0, 0, 0) }
+        },
+        vertexShader: `
+            uniform vec3 viewVector;
+            uniform float c;
+            uniform float p;
+            varying float intensity;
+            void main() {
+                vec3 vNormal = normalize(normalMatrix * normal);
+                vec3 vNormel = normalize(normalMatrix * viewVector);
+                intensity = pow(c - dot(vNormal, vNormel), p);
+                gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+            }
+        `,
+        fragmentShader: `
+            uniform vec3 glowColor;
+            varying float intensity;
+            void main() {
+                vec3 glow = glowColor * intensity;
+                gl_FragColor = vec4(glow, 1.0);
+            }
+        `,
+        side: THREE.BackSide,
+        blending: THREE.AdditiveBlending,
+        transparent: true
+    });
+    const halo = new THREE.Mesh(haloGeometry, haloMaterial);
+    scene.add(halo);
 
-          // Y-axis
-          let xt = x * cy - z * sy;
-          zt = x * sy + z * cy;
-          x = xt;
-          z = zt;
-
-          // Projection
-          const scale = PERSPECTIVE / (PERSPECTIVE + z);
-          const x2d = (x * scale) + PROJECTION_CENTER_X;
-          const y2d = (y * scale) + PROJECTION_CENTER_Y;
-
-          // Visibility check (is it on the back of the globe?)
-          // If z > 0, it's pushed back. However, our projection math above:
-          // Standard: z increases away from camera. 
-          // Here: positive z is 'back' based on rotation logic usually.
-          // Let's use opacity to hide back pins.
-          const opacity = z > 20 ? 0 : 1; // Simple culling
-
-          return {
-              id: loc.id,
-              x: x2d,
-              y: y2d,
-              z: z,
-              opacity
-          };
-      });
-      
-      setProjectedPins(newPinPositions);
-
-      // 4. Draw Halo/Glow
-      const gradient = ctx.createRadialGradient(
-          PROJECTION_CENTER_X, PROJECTION_CENTER_Y, GLOBE_RADIUS * 0.8,
-          PROJECTION_CENTER_X, PROJECTION_CENTER_Y, GLOBE_RADIUS * 1.5
-      );
-      gradient.addColorStop(0, 'rgba(0,0,0,0)');
-      gradient.addColorStop(0.5, 'rgba(34, 197, 94, 0.05)'); // Subtle Green
-      gradient.addColorStop(1, 'rgba(0,0,0,0)');
-      
-      ctx.fillStyle = gradient;
-      ctx.fillRect(0, 0, width, height);
-
-      animationFrameId = requestAnimationFrame(render);
+    // --- ANIMATION LOOP ---
+    const animate = () => {
+        requestAnimationFrame(animate);
+        if (controlsRef.current) controlsRef.current.update();
+        if (cameraRef.current && haloMaterial) {
+            haloMaterial.uniforms.viewVector.value = new THREE.Vector3().subVectors(cameraRef.current.position, halo.position);
+        }
+        if (rendererRef.current && sceneRef.current && cameraRef.current) {
+            rendererRef.current.render(sceneRef.current, cameraRef.current);
+        }
     };
+    animate();
 
-    render();
-
-    const handleResize = () => {
-        width = container.offsetWidth;
-        height = container.offsetHeight;
-        canvas.width = width;
-        canvas.height = height;
-    };
-
-    const handleMouseMove = (e: MouseEvent) => {
-        const rect = container.getBoundingClientRect();
-        mouse.x = e.clientX - rect.left;
-        mouse.y = e.clientY - rect.top;
-    };
-
-    window.addEventListener('resize', handleResize);
-    container.addEventListener('mousemove', handleMouseMove);
-
+    // Cleanup
     return () => {
-        window.removeEventListener('resize', handleResize);
-        container.removeEventListener('mousemove', handleMouseMove);
-        cancelAnimationFrame(animationFrameId);
+        if (containerRef.current && rendererRef.current) {
+            containerRef.current.removeChild(rendererRef.current.domElement);
+            rendererRef.current.dispose();
+        }
     };
-  }, [mappedLocations, smoothVelocity]); // Re-run if velocity changes? No, use Ref for velocity to avoid re-bind. 
-  // Actually smoothVelocity.get() works inside the loop.
+  }, []);
 
-  const nextImage = () => {
-    if (selectedLocation) {
-        setActiveImageIndex((prev) => (prev + 1) % selectedLocation.images.length);
+  // --- DATA LOADING & PROCESSING ---
+  useEffect(() => {
+    const loadGeoData = async () => {
+        try {
+            setLoadingText("Downloading Global Vector Data...");
+            const worldRes = await fetch('https://raw.githubusercontent.com/tower1229/echarts-world-map-jeojson/refs/heads/master/worldZH.json');
+            const worldJson = await worldRes.json();
+
+            setLoadingText("Downloading China High-Precision Data...");
+            const chinaRes = await fetch('https://geo.datav.aliyun.com/areas_v3/bound/100000_full.json');
+            const chinaJson = await chinaRes.json();
+
+            setLoadingText("Applying Coordinate Correction (GCJ-02 -> WGS-84)...");
+            
+            // Filter out China from World Map
+            const features = worldJson.features.filter((f: any) => f.properties.name !== 'China');
+
+            // Process China Data (Correct Coordinates)
+            const chinaFeatures = chinaJson.features.map((f: any) => {
+                const geometry = JSON.parse(JSON.stringify(f.geometry)); // Deep copy
+                
+                // Helper to check validity
+                const isValid = (coord: number[]) => !isNaN(coord[0]) && !isNaN(coord[1]);
+
+                // Apply correction to geometries
+                if (geometry.type === 'Polygon') {
+                    geometry.coordinates = geometry.coordinates.map((ring: any) => 
+                        ring.map((pt: any) => isValid(pt) ? gcj02towgs84(pt[0], pt[1]) : [0,0])
+                    );
+                } else if (geometry.type === 'MultiPolygon') {
+                     geometry.coordinates = geometry.coordinates.map((poly: any) => 
+                        poly.map((ring: any) => 
+                            ring.map((pt: any) => isValid(pt) ? gcj02towgs84(pt[0], pt[1]) : [0,0])
+                        )
+                    );
+                }
+
+                return { ...f, geometry };
+            });
+
+            // Merge
+            const finalFeatures = [...features, ...chinaFeatures];
+            setGeoData(finalFeatures);
+            
+            setLoadingText("Constructing 3D Geometry...");
+            // Create 3D Meshes from GeoJSON
+            drawMap(finalFeatures);
+            
+            setIsLoading(false);
+        } catch (error) {
+            console.error(error);
+            setLoadingText("Error Loading Data");
+        }
+    };
+
+    loadGeoData();
+  }, []);
+
+  // --- RENDER EXISTING LOCATIONS ---
+  useEffect(() => {
+    if (locations.length > 0 && globeRef.current) {
+        locations.forEach(loc => {
+            // Guard against NaN
+            let lat = loc.lat;
+            let lon = loc.lng;
+            
+            // Legacy/fallback logic
+            if ((lat === undefined || isNaN(lat)) && loc.x !== undefined) {
+               lon = (loc.x / 100) * 360 - 180;
+               lat = 90 - (loc.y / 100) * 180;
+            }
+            if (isNaN(lat) || isNaN(lon)) return; // Skip invalid
+
+            const pos = latLonToVector3(lat, lon, 10.2);
+            if (isNaN(pos.x) || isNaN(pos.y) || isNaN(pos.z)) return;
+
+            if (loc.images && loc.images.length > 0) {
+                const texture = new THREE.TextureLoader().load(loc.images[0]);
+                const material = new THREE.SpriteMaterial({ map: texture });
+                const sprite = new THREE.Sprite(material);
+                sprite.position.copy(pos);
+                sprite.scale.set(1.5, 1.5, 1.5);
+                
+                const lineGeo = new THREE.BufferGeometry().setFromPoints([
+                    pos.clone().normalize().multiplyScalar(10),
+                    pos
+                ]);
+                const line = new THREE.Line(lineGeo, new THREE.LineBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.5 }));
+                
+                globeRef.current?.add(sprite);
+                globeRef.current?.add(line);
+                
+                setPhotos(prev => {
+                    if (prev.find(p => p.id === loc.id)) return prev;
+                    return [...prev, { id: loc.id, url: loc.images[0], pos }];
+                });
+            }
+        });
     }
+  }, [locations, isLoading]); 
+
+  const drawMap = (features: any[]) => {
+      if (!globeRef.current) return;
+      const radius = 10;
+
+      // Group for all lines to optimize render
+      const material = new THREE.LineBasicMaterial({ color: 0x4ade80, transparent: true, opacity: 0.3 });
+      
+      features.forEach((feature) => {
+          const { geometry } = feature;
+          const coords = geometry.coordinates;
+
+          const drawRing = (ring: any[]) => {
+              const points: THREE.Vector3[] = [];
+              ring.forEach((coord: [number, number]) => {
+                  if (Array.isArray(coord) && coord.length >= 2 && !isNaN(coord[0]) && !isNaN(coord[1])) {
+                      const vec = latLonToVector3(coord[1], coord[0], radius);
+                      if (!isNaN(vec.x)) points.push(vec);
+                  }
+              });
+              
+              if (points.length > 0) {
+                  const lineGeometry = new THREE.BufferGeometry().setFromPoints(points);
+                  const line = new THREE.Line(lineGeometry, material);
+                  globeRef.current?.add(line);
+              }
+          };
+
+          if (geometry.type === 'Polygon') {
+              coords.forEach((ring: any) => drawRing(ring));
+          } else if (geometry.type === 'MultiPolygon') {
+              coords.forEach((poly: any) => poly.forEach((ring: any) => drawRing(ring)));
+          }
+      });
   };
 
-  const prevImage = () => {
-    if (selectedLocation) {
-        setActiveImageIndex((prev) => (prev - 1 + selectedLocation.images.length) % selectedLocation.images.length);
-    }
+  // --- INTERACTION LOGIC ---
+
+  const flyToRegion = (feature: any) => {
+      if (!controlsRef.current || !cameraRef.current) return;
+      
+      // Calculate Centroid
+      let center = [0, 0];
+      if (feature.properties.center) {
+          center = feature.properties.center; 
+      } else {
+          // Calculate centroid from bbox or geometry approximation
+          let coords = feature.geometry.coordinates[0];
+          if(feature.geometry.type === 'MultiPolygon') coords = coords[0][0];
+          // Take simple average of first ring for smoother target
+          let sumLon = 0, sumLat = 0;
+          let validCount = 0;
+          coords.forEach((c: number[]) => { 
+              if(!isNaN(c[0]) && !isNaN(c[1])) {
+                  sumLon += c[0]; sumLat += c[1]; 
+                  validCount++;
+              }
+          });
+          if (validCount > 0) center = [sumLon / validCount, sumLat / validCount];
+      }
+
+      if(feature.properties.adcode && outOfChina(center[0], center[1]) === false) {
+           const bbox = getBoundingBox(feature.geometry);
+           center = [(bbox.minLng + bbox.maxLng)/2, (bbox.minLat + bbox.maxLat)/2];
+      }
+
+      const targetPos = latLonToVector3(center[1], center[0], 25); 
+
+      // Stop auto rotation
+      controlsRef.current.autoRotate = false;
+
+      // Simple Animation (Lerp)
+      const startPos = cameraRef.current.position.clone();
+      const duration = 1500;
+      const startTime = Date.now();
+
+      const animateFly = () => {
+          const now = Date.now();
+          const progress = Math.min((now - startTime) / duration, 1);
+          const ease = 1 - Math.pow(1 - progress, 3); // Cubic out
+
+          // Spherical Interpolation
+          cameraRef.current?.position.copy(startPos).lerp(targetPos, ease);
+          cameraRef.current?.lookAt(0, 0, 0);
+
+          if (progress < 1) {
+              requestAnimationFrame(animateFly);
+          } else {
+              controlsRef.current!.enabled = true;
+          }
+      };
+
+      animateFly();
+      setSelectedRegion(feature);
+      setSearchQuery(feature.properties.name);
   };
+
+  const handleSearchSelect = (name: string) => {
+      const feature = geoData.find(f => f.properties.name === name || (f.properties.name && f.properties.name.includes(name)));
+      if (feature) {
+          flyToRegion(feature);
+      }
+  };
+
+  // --- PHOTO SPRITE SYSTEM ---
+
+  const handlePhotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+      if (!selectedRegion || !e.target.files?.[0] || !globeRef.current) return;
+      
+      const file = e.target.files[0];
+      const reader = new FileReader();
+      
+      reader.onload = (event) => {
+          if (!event.target?.result) return;
+          const imgUrl = event.target.result as string;
+          
+          // Optimized Sampling using Bounding Box
+          const bbox = getBoundingBox(selectedRegion.geometry);
+          
+          let validPoint: THREE.Vector3 | null = null;
+          let attempts = 0;
+          const maxAttempts = 500; // Increased attempts
+
+          while (!validPoint && attempts < maxAttempts) {
+              attempts++;
+              
+              // Random Point WITHIN Bounding Box
+              const lat = bbox.minLat + Math.random() * (bbox.maxLat - bbox.minLat);
+              const lon = bbox.minLng + Math.random() * (bbox.maxLng - bbox.minLng);
+
+              // 2. Check if inside polygon
+              const geometry = selectedRegion.geometry;
+              let isInside = false;
+
+              const checkRings = (rings: any[]) => {
+                   return isPointInPolygon([lon, lat], rings[0]);
+              };
+
+              if (geometry.type === 'Polygon') {
+                  isInside = checkRings(geometry.coordinates);
+              } else if (geometry.type === 'MultiPolygon') {
+                  for (let poly of geometry.coordinates) {
+                      if (checkRings(poly)) {
+                          isInside = true;
+                          break;
+                      }
+                  }
+              }
+
+              if (isInside) {
+                   // 3. Collision Check
+                   const candidatePos = latLonToVector3(lat, lon, 10.2); 
+                   let collision = false;
+                   for (let p of photos) {
+                       if (p.pos.distanceTo(candidatePos) < 0.5) { // Reduced collision radius
+                           collision = true;
+                           break;
+                       }
+                   }
+                   if (!collision) {
+                       validPoint = candidatePos;
+                   }
+              }
+          }
+
+          if (validPoint) {
+              const texture = new THREE.TextureLoader().load(imgUrl);
+              const material = new THREE.SpriteMaterial({ map: texture });
+              const sprite = new THREE.Sprite(material);
+              sprite.position.copy(validPoint);
+              sprite.scale.set(1.5, 1.5, 1.5);
+              
+              const lineGeo = new THREE.BufferGeometry().setFromPoints([
+                  validPoint.clone().normalize().multiplyScalar(10),
+                  validPoint
+              ]);
+              const line = new THREE.Line(lineGeo, new THREE.LineBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.5 }));
+              
+              globeRef.current?.add(sprite);
+              globeRef.current?.add(line);
+
+              setPhotos(prev => [...prev, { id: Date.now(), url: imgUrl, pos: validPoint! }]);
+          } else {
+              alert("Could not find a spot. Try again or select a larger region.");
+          }
+      };
+      
+      reader.readAsDataURL(file);
+  };
+
+  const filteredCountries = useMemo(() => {
+      if (!searchQuery || searchQuery.length < 1) return [];
+      // Robust search: English or Chinese
+      // Note: properties.name is typically Chinese in this dataset.
+      return geoData
+        .filter(f => {
+            const name = f.properties.name || "";
+            return name.toLowerCase().includes(searchQuery.toLowerCase());
+        })
+        .slice(0, 5);
+  }, [searchQuery, geoData]);
 
   return (
-    <section id="travel" className="relative py-24 bg-[#020202] overflow-hidden min-h-[80vh] flex items-center">
-        <div className="max-w-7xl mx-auto px-6 md:px-12 w-full h-full">
-            <div className="flex items-center gap-4 mb-8">
-                <div className="w-2 h-2 bg-yellow-500 rounded-full animate-pulse"></div>
-                <h2 className="text-sm font-mono tracking-widest text-gray-400">GLOBAL CONNECTIONS</h2>
-            </div>
-            
-            <div 
-                ref={containerRef}
-                className="relative w-full aspect-[4/3] md:aspect-[16/7] border border-white/10 bg-black/40 rounded-xl overflow-hidden backdrop-blur-sm group shadow-[0_0_50px_rgba(0,0,0,0.5)]" 
-            >
-                <canvas ref={canvasRef} className="absolute inset-0 w-full h-full opacity-80" />
-                
-                {/* HTML Overlay for Pins */}
-                {projectedPins.map((pin) => {
-                    const loc = locations.find(l => l.id === pin.id);
-                    if (!loc || pin.opacity === 0) return null;
+    <section id="travel" className="relative w-full h-screen bg-[#050505] overflow-hidden">
+        
+        {/* 3D Container */}
+        <div ref={containerRef} className="absolute inset-0 z-0 cursor-move" />
 
-                    return (
-                        <div
-                            key={pin.id}
-                            className="absolute transform -translate-x-1/2 -translate-y-1/2 z-20"
-                            style={{ 
-                                left: pin.x, 
-                                top: pin.y,
-                                opacity: pin.opacity 
-                            }}
-                        >
-                            <motion.button
-                                onClick={() => {
-                                    setSelectedLocation(loc);
-                                    setActiveImageIndex(0);
-                                }}
-                                className="relative group/pin"
-                                whileHover={{ scale: 1.2 }}
-                            >
-                                <div className="w-3 h-3 bg-yellow-500 rounded-full shadow-[0_0_15px_#eab308]"></div>
-                                <div className="absolute inset-0 bg-yellow-500 rounded-full animate-ping opacity-50"></div>
-                                
-                                {/* Connecting Line to text */}
-                                <motion.div 
-                                    className="absolute left-4 top-1/2 w-8 h-[1px] bg-white/30 origin-left"
-                                    initial={{ scaleX: 0 }}
-                                    whileInView={{ scaleX: 1 }}
-                                />
-                                
-                                {/* Label */}
-                                <div className="absolute left-14 top-1/2 -translate-y-1/2 whitespace-nowrap">
-                                    <div className="bg-black/80 backdrop-blur-md border border-white/20 px-3 py-1.5 rounded-sm text-[10px] tracking-widest uppercase text-white font-mono flex items-center gap-2">
-                                        {loc.name}
-                                        <Globe size={10} className="text-gray-500"/>
-                                    </div>
-                                </div>
-                            </motion.button>
-                        </div>
-                    );
-                })}
-
-                {/* HUD Elements */}
-                <div className="absolute top-6 right-6 flex flex-col items-end gap-1 opacity-50 pointer-events-none">
-                    <div className="flex gap-1">
-                        <div className="w-16 h-[2px] bg-green-500/50"></div>
-                        <div className="w-2 h-[2px] bg-green-500/50"></div>
-                    </div>
-                    <div className="text-[10px] font-mono text-green-500">SYSTEM.ORBITAL_VIEW</div>
-                </div>
-
-                <div className="absolute bottom-6 left-6 text-xs text-gray-600 font-mono pointer-events-none">
-                    // SCROLL TO ACCELERATE ROTATION<br/>
-                    // INTERACT WITH NODES
-                </div>
-            </div>
-        </div>
-
-        {/* Gallery Modal */}
+        {/* Loading Overlay */}
         <AnimatePresence>
-            {selectedLocation && (
+            {isLoading && (
                 <motion.div 
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
+                    initial={{ opacity: 1 }}
                     exit={{ opacity: 0 }}
-                    className="fixed inset-0 z-[60] flex items-center justify-center bg-black/90 backdrop-blur-xl p-4 md:p-12"
-                    onClick={() => setSelectedLocation(null)}
+                    className="absolute inset-0 z-50 bg-[#050505] flex flex-col items-center justify-center"
                 >
-                    <div 
-                        className="w-full max-w-6xl h-full max-h-[80vh] flex flex-col md:flex-row gap-8"
-                        onClick={(e) => e.stopPropagation()}
-                    >
-                        {/* Image Viewer */}
+                    <div className="w-64 h-1 bg-gray-800 rounded-full overflow-hidden mb-4">
                         <motion.div 
-                            className="flex-1 relative bg-black border border-white/10 rounded-lg overflow-hidden group"
-                            initial={{ y: 20, opacity: 0 }}
-                            animate={{ y: 0, opacity: 1 }}
-                            transition={{ delay: 0.1 }}
-                        >
-                             <AnimatePresence mode="wait">
-                                <motion.img 
-                                    key={activeImageIndex}
-                                    src={selectedLocation.images[activeImageIndex]} 
-                                    alt={selectedLocation.name}
-                                    className="w-full h-full object-cover"
-                                    initial={{ opacity: 0, scale: 1.1 }}
-                                    animate={{ opacity: 1, scale: 1 }}
-                                    exit={{ opacity: 0 }}
-                                    transition={{ duration: 0.5 }}
-                                />
-                             </AnimatePresence>
-                             
-                             {/* Navigation */}
-                             <button 
-                                onClick={prevImage}
-                                className="absolute left-4 top-1/2 -translate-y-1/2 p-3 rounded-full bg-black/50 text-white hover:bg-white hover:text-black transition-all opacity-0 group-hover:opacity-100"
-                             >
-                                <ChevronLeft />
-                             </button>
-                             <button 
-                                onClick={nextImage}
-                                className="absolute right-4 top-1/2 -translate-y-1/2 p-3 rounded-full bg-black/50 text-white hover:bg-white hover:text-black transition-all opacity-0 group-hover:opacity-100"
-                             >
-                                <ChevronRight />
-                             </button>
-
-                             <div className="absolute bottom-4 left-0 w-full flex justify-center gap-2">
-                                {selectedLocation.images.map((_, idx) => (
-                                    <button 
-                                        key={idx}
-                                        onClick={() => setActiveImageIndex(idx)}
-                                        className={`w-1.5 h-1.5 rounded-full transition-all ${idx === activeImageIndex ? 'bg-white w-4' : 'bg-white/30 hover:bg-white/50'}`}
-                                    />
-                                ))}
-                             </div>
-                        </motion.div>
-
-                        {/* Info Panel */}
-                        <motion.div 
-                            className="md:w-80 flex flex-col gap-6"
-                            initial={{ x: 20, opacity: 0 }}
-                            animate={{ x: 0, opacity: 1 }}
-                            transition={{ delay: 0.2 }}
-                        >
-                            <div className="flex justify-between items-start">
-                                <div>
-                                    <h3 className="text-4xl font-bold mb-2">{selectedLocation.name}</h3>
-                                    <p className="text-yellow-500 font-mono">{selectedLocation.date}</p>
-                                </div>
-                                <button 
-                                    onClick={() => setSelectedLocation(null)}
-                                    className="p-2 border border-white/10 rounded-full hover:bg-white hover:text-black transition-colors"
-                                >
-                                    <X size={20} />
-                                </button>
-                            </div>
-
-                            <div className="flex-1 overflow-y-auto pr-2 space-y-4">
-                                <p className="text-gray-400 leading-relaxed text-sm">
-                                    Explored the vibrant culture and aesthetics of {selectedLocation.name}. 
-                                    Captured moments of architectural beauty and urban life.
-                                </p>
-                                
-                                <div className="grid grid-cols-2 gap-2">
-                                    {selectedLocation.images.map((img, idx) => (
-                                        <button 
-                                            key={idx}
-                                            onClick={() => setActiveImageIndex(idx)}
-                                            className={`aspect-square rounded overflow-hidden border ${idx === activeImageIndex ? 'border-yellow-500' : 'border-transparent opacity-60 hover:opacity-100'} transition-all`}
-                                        >
-                                            <img src={img} alt="" className="w-full h-full object-cover" />
-                                        </button>
-                                    ))}
-                                </div>
-                            </div>
-                        </motion.div>
+                            className="h-full bg-green-500"
+                            initial={{ width: 0 }}
+                            animate={{ width: "100%" }}
+                            transition={{ duration: 2, repeat: Infinity }}
+                        />
                     </div>
+                    <p className="text-green-500 font-mono text-xs tracking-widest">{loadingText}</p>
                 </motion.div>
             )}
         </AnimatePresence>
+
+        {/* --- LEFT PANEL: Search & Selection --- */}
+        <motion.div 
+            className="absolute left-6 top-24 bottom-6 w-80 pointer-events-none flex flex-col gap-4"
+            initial={{ x: -50, opacity: 0 }}
+            animate={{ x: 0, opacity: 1 }}
+            transition={{ delay: 0.5 }}
+        >
+            {/* Glassmorphism Container */}
+            <div className="bg-black/40 backdrop-blur-xl border border-white/10 rounded-2xl p-6 pointer-events-auto flex-1 flex flex-col shadow-2xl">
+                <h2 className="text-xl font-bold mb-1 flex items-center gap-2">
+                    <Globe size={18} className="text-green-500"/>
+                    Global Footprint
+                </h2>
+                <p className="text-xs text-gray-500 mb-6 font-mono">WGS-84 / GCJ-02 DUAL SYSTEM</p>
+
+                {/* Search */}
+                <div className="relative mb-6">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={16} />
+                    <input 
+                        type="text" 
+                        value={searchQuery}
+                        onChange={(e) => setSearchQuery(e.target.value)}
+                        placeholder="Search World..."
+                        className="w-full bg-white/5 border border-white/10 rounded-lg pl-10 pr-4 py-3 text-sm focus:outline-none focus:border-green-500 transition-colors"
+                    />
+                    {/* Results Dropdown */}
+                    {filteredCountries.length > 0 && searchQuery !== selectedRegion?.properties.name && (
+                        <div className="absolute top-full left-0 w-full bg-gray-900/90 border border-white/10 mt-2 rounded-lg overflow-hidden z-20 max-h-60 overflow-y-auto">
+                            {filteredCountries.map((f, i) => (
+                                <button
+                                    key={i}
+                                    onClick={() => flyToRegion(f)}
+                                    className="w-full text-left px-4 py-2 hover:bg-white/10 text-sm flex justify-between items-center"
+                                >
+                                    <span>{f.properties.name}</span>
+                                    <span className="text-[10px] text-gray-500 font-mono uppercase">FLY_TO</span>
+                                </button>
+                            ))}
+                        </div>
+                    )}
+                </div>
+
+                {/* Selected Region Info */}
+                <AnimatePresence mode="wait">
+                    {selectedRegion ? (
+                        <motion.div 
+                            key="selected"
+                            initial={{ opacity: 0, y: 10 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            exit={{ opacity: 0, y: -10 }}
+                            className="flex-1 flex flex-col"
+                        >
+                            <div className="flex justify-between items-start mb-4 border-b border-white/10 pb-4">
+                                <div>
+                                    <h3 className="text-2xl font-bold text-white">{selectedRegion.properties.name}</h3>
+                                    <p className="text-green-400 text-xs font-mono mt-1">
+                                        ID: {selectedRegion.properties.adcode || selectedRegion.id || 'N/A'}
+                                    </p>
+                                </div>
+                                <button onClick={() => { setSelectedRegion(null); setSearchQuery(''); controlsRef.current!.autoRotate = true; }} className="p-1 hover:bg-white/10 rounded">
+                                    <X size={16} />
+                                </button>
+                            </div>
+
+                            {/* Photo Upload Area */}
+                            <div className="flex-1 relative border border-dashed border-white/20 rounded-lg bg-white/5 hover:bg-white/10 transition-colors group cursor-pointer overflow-hidden flex flex-col items-center justify-center text-center p-4">
+                                <input 
+                                    type="file" 
+                                    accept="image/*"
+                                    onChange={handlePhotoUpload}
+                                    className="absolute inset-0 opacity-0 cursor-pointer z-10"
+                                />
+                                <div className="w-12 h-12 rounded-full bg-green-500/20 flex items-center justify-center mb-3 group-hover:scale-110 transition-transform">
+                                    <Upload size={20} className="text-green-400" />
+                                </div>
+                                <p className="text-sm font-medium">Upload Memory</p>
+                                <p className="text-xs text-gray-500 mt-2 px-4">
+                                    Selected image will be randomly projected within region boundaries.
+                                </p>
+                            </div>
+                        </motion.div>
+                    ) : (
+                        <motion.div 
+                            key="empty"
+                            initial={{ opacity: 0 }}
+                            animate={{ opacity: 1 }}
+                            className="flex-1 flex flex-col items-center justify-center text-gray-600 space-y-4"
+                        >
+                            <MapPin size={48} className="opacity-20" />
+                            <p className="text-sm">Select a region to view or add memories.</p>
+                        </motion.div>
+                    )}
+                </AnimatePresence>
+            </div>
+        </motion.div>
+
+        {/* --- RIGHT PANEL: Stats --- */}
+        <motion.div 
+            className="absolute right-6 top-24 w-64 pointer-events-none"
+            initial={{ x: 50, opacity: 0 }}
+            animate={{ x: 0, opacity: 1 }}
+            transition={{ delay: 0.7 }}
+        >
+             <div className="bg-black/40 backdrop-blur-xl border border-white/10 rounded-2xl p-6 pointer-events-auto">
+                 <h3 className="text-xs font-mono text-gray-500 tracking-widest uppercase mb-4">Travel Stats</h3>
+                 <div className="space-y-4">
+                    <div className="flex justify-between items-center">
+                        <span className="text-sm text-gray-300">Regions Visited</span>
+                        <span className="text-xl font-bold font-mono text-white">{photos.length}</span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                        <span className="text-sm text-gray-300">Total Memories</span>
+                        <span className="text-xl font-bold font-mono text-green-400">{photos.length}</span>
+                    </div>
+                    <div className="h-[1px] bg-white/10 my-2"></div>
+                    <div className="text-[10px] text-gray-600 leading-relaxed">
+                        Projection Resampling: <span className="text-green-500">Active</span><br/>
+                        Boundaries: <span className="text-green-500">Merged (World+CN)</span>
+                    </div>
+                 </div>
+             </div>
+        </motion.div>
+
     </section>
   );
 };

@@ -17,41 +17,52 @@ const MatrixLoader: React.FC<MatrixLoaderProps> = ({ onLoadingComplete }) => {
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
-    canvas.width = window.innerWidth;
-    canvas.height = window.innerHeight;
+    // Handle High DPI displays for crisp text
+    const dpr = window.devicePixelRatio || 1;
+    const resize = () => {
+        canvas.width = window.innerWidth * dpr;
+        canvas.height = window.innerHeight * dpr;
+        ctx.scale(dpr, dpr);
+    };
+    resize();
 
     const katakana = 'アァカサタナハマヤャラワガザダバパイィキシチニヒミリヰギジヂビピウゥクスツヌフムユュルグズブヅプエェケセテネヘメレヱゲゼデベペオォコソトノホモヨョロヲゴゾドボポヴッン';
     const latin = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
     const nums = '0123456789';
     const alphabet = katakana + latin + nums;
 
-    const fontSize = 16;
-    const columns = canvas.width / fontSize;
+    const fontSize = 16; 
+    const columns = window.innerWidth / fontSize;
 
     const drops: number[] = [];
+    // Initialize drops scattered across the screen height
     for (let x = 0; x < columns; x++) {
-      drops[x] = 1;
+      drops[x] = Math.random() * (window.innerHeight / fontSize); 
     }
 
     let animationFrameId: number;
 
     const draw = () => {
-      ctx.fillStyle = 'rgba(0, 0, 0, 0.05)'; // Fade effect
-      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      // Create trails with a semi-transparent black fade
+      // Use very low opacity for the fade to make trails longer and smoother
+      ctx.fillStyle = 'rgba(5, 5, 5, 0.05)'; 
+      ctx.fillRect(0, 0, canvas.width / dpr, canvas.height / dpr);
 
-      ctx.fillStyle = '#0F0'; // Green text
-      ctx.font = fontSize + 'px monospace';
+      ctx.font = '700 ' + fontSize + 'px monospace'; 
 
       for (let i = 0; i < drops.length; i++) {
         const text = alphabet.charAt(Math.floor(Math.random() * alphabet.length));
         
-        // Varying colors for depth
-        const isWhite = Math.random() > 0.95;
-        ctx.fillStyle = isWhite ? '#FFF' : '#22c55e'; // White or Matrix Green
+        // "Demure" Palette: Mostly dark green/grey, occasional bright sparkles
+        const rand = Math.random();
+        if (rand > 0.995) ctx.fillStyle = '#ffffff'; // White Sparkle
+        else if (rand > 0.95) ctx.fillStyle = '#4ade80'; // Bright Green
+        else ctx.fillStyle = '#15803d'; // Dark Matrix Green
 
         ctx.fillText(text, i * fontSize, drops[i] * fontSize);
 
-        if (drops[i] * fontSize > canvas.height && Math.random() > 0.975) {
+        // Random reset to top
+        if (drops[i] * fontSize > window.innerHeight && Math.random() > 0.975) {
           drops[i] = 0;
         }
         drops[i]++;
@@ -61,23 +72,18 @@ const MatrixLoader: React.FC<MatrixLoaderProps> = ({ onLoadingComplete }) => {
 
     draw();
 
-    const handleResize = () => {
-        canvas.width = window.innerWidth;
-        canvas.height = window.innerHeight;
-    };
-
-    window.addEventListener('resize', handleResize);
+    window.addEventListener('resize', resize);
 
     return () => {
       cancelAnimationFrame(animationFrameId);
-      window.removeEventListener('resize', handleResize);
+      window.removeEventListener('resize', resize);
     };
   }, []);
 
   // Progress Counter
   useEffect(() => {
-    const duration = 2500; // 2.5 seconds total load time
-    const intervalTime = 25;
+    const duration = 2800; // Total loading time (ms)
+    const intervalTime = 20;
     const steps = duration / intervalTime;
     let currentStep = 0;
 
@@ -90,7 +96,7 @@ const MatrixLoader: React.FC<MatrixLoaderProps> = ({ onLoadingComplete }) => {
         clearInterval(timer);
         setTimeout(() => {
             onLoadingComplete();
-        }, 500); // Slight delay after 100%
+        }, 800); // Slight pause at 100% before exit
       }
     }, intervalTime);
 
@@ -99,27 +105,57 @@ const MatrixLoader: React.FC<MatrixLoaderProps> = ({ onLoadingComplete }) => {
 
   return (
     <motion.div 
-      className="fixed inset-0 z-50 bg-black flex flex-col items-center justify-center overflow-hidden"
-      exit={{ opacity: 0, y: -100, transition: { duration: 0.8, ease: "easeInOut" } }}
+      className="fixed inset-0 z-[100] bg-[#050505] flex items-center justify-center overflow-hidden"
+      exit={{ 
+          opacity: 0, 
+          transition: { duration: 0.8, ease: "easeInOut" } 
+      }}
     >
-      <canvas ref={canvasRef} className="absolute inset-0 opacity-30" />
-      
-      <div className="relative z-10 flex flex-col items-center">
-        <motion.div 
-            className="text-8xl md:text-9xl font-bold font-mono tracking-tighter text-white"
-            initial={{ opacity: 0, scale: 0.8 }}
-            animate={{ opacity: 1, scale: 1 }}
-        >
-          {progress}%
-        </motion.div>
-        <motion.div 
-            className="mt-4 text-xs tracking-[0.5em] text-gray-400 uppercase"
-            animate={{ opacity: [0.5, 1, 0.5] }}
-            transition={{ repeat: Infinity, duration: 1.5 }}
-        >
-          System Initializing
-        </motion.div>
-      </div>
+        {/* 1. Fullscreen Matrix Canvas */}
+        <canvas ref={canvasRef} className="absolute inset-0 w-full h-full opacity-60" />
+
+        {/* 2. Large "ZU" Logo Overlay */}
+        <div className="absolute inset-0 z-10 pointer-events-none flex items-center justify-center">
+            <h1 
+                className="text-[25vw] font-black tracking-tighter text-transparent select-none"
+                style={{ 
+                    fontFamily: "'Space Grotesk', sans-serif",
+                    WebkitTextStroke: "2px rgba(255, 255, 255, 0.15)",
+                    filter: "drop-shadow(0 0 20px rgba(74, 222, 128, 0.2))"
+                }}
+            >
+                ZU
+            </h1>
+        </div>
+
+        {/* 3. Foreground UI (Progress Bar & Stats) */}
+        <div className="absolute inset-0 z-20 flex flex-col items-center justify-end pb-16 md:pb-24 pointer-events-none">
+            <div className="flex flex-col items-center gap-6 w-64 md:w-80">
+                 
+                 {/* Progress Bar Container */}
+                 <div className="w-full h-[2px] bg-white/10 rounded-full overflow-hidden backdrop-blur-sm">
+                    <motion.div 
+                        className="h-full bg-gradient-to-r from-green-500 to-green-300 shadow-[0_0_10px_rgba(34,197,94,0.5)]"
+                        initial={{ width: 0 }}
+                        animate={{ width: `${progress}%` }}
+                        transition={{ ease: "linear", duration: 0.1 }}
+                    />
+                 </div>
+
+                 {/* Text Info */}
+                 <div className="flex justify-between w-full text-[10px] md:text-xs font-mono tracking-[0.2em] text-gray-500 uppercase">
+                    <motion.div 
+                        className="flex items-center gap-2"
+                        animate={{ opacity: [0.7, 1, 0.7] }}
+                        transition={{ duration: 2, repeat: Infinity }}
+                    >
+                        <span className="w-1.5 h-1.5 bg-green-500 rounded-full animate-pulse"></span>
+                        <span>System.Boot</span>
+                    </motion.div>
+                    <span className="text-white font-bold">{progress}%</span>
+                 </div>
+            </div>
+        </div>
     </motion.div>
   );
 };
