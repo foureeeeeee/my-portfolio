@@ -228,7 +228,7 @@ const Hero: React.FC = () => {
           <motion.div 
             initial={{ opacity: 0, y: 100 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ ...smoothTransition, delay: 0.2 }}
+            transition={{ ...smoothTransition, delay: 0.8 }}
             className="relative group inline-block cursor-pointer mb-8"
           >
             {/* Interactive Wrapper for Title */}
@@ -250,7 +250,7 @@ const Hero: React.FC = () => {
                         <motion.span 
                           initial={{ y: "100%" }}
                           animate={{ y: 0 }}
-                          transition={{ ...smoothTransition, delay: 0.4 }}
+                          transition={{ ...smoothTransition, delay: 1.0 }}
                           className="block"
                         >
                           Hello
@@ -267,7 +267,7 @@ const Hero: React.FC = () => {
                         <motion.span 
                           initial={{ y: "100%" }}
                           animate={{ y: 0 }}
-                          transition={{ ...smoothTransition, delay: 0.5 }}
+                          transition={{ ...smoothTransition, delay: 1.1 }}
                           className="block"
                         >
                           I'm <span className="text-gray-500 italic group-hover:text-white transition-colors duration-300">Zu</span>
@@ -280,7 +280,7 @@ const Hero: React.FC = () => {
                     <motion.div 
                          initial={{ y: "100%" }}
                          animate={{ y: 0 }}
-                         transition={{ ...smoothTransition, delay: 0.6 }}
+                         transition={{ ...smoothTransition, delay: 1.2 }}
                          className="block"
                     >
                         {/* Lamination Gradient Text */}
@@ -330,7 +330,7 @@ const Hero: React.FC = () => {
             className="flex flex-wrap gap-4 mt-8"
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ ...smoothTransition, delay: 1 }}
+            transition={{ ...smoothTransition, delay: 1.5 }}
           >
             {['UI/UX Design', 'Figma Expert', 'AIGC Creator', 'Frontend Dev'].map((tag, i) => (
               <span key={i} className="px-5 py-2 border border-white/10 bg-white/5 backdrop-blur-sm rounded-full text-sm tracking-wide uppercase hover:bg-white hover:text-black hover:scale-105 transition-all duration-300">
@@ -348,12 +348,12 @@ const Hero: React.FC = () => {
                  className="w-24 h-[1px] bg-gradient-to-r from-transparent to-white mb-4 self-start md:self-end"
                  initial={{ width: 0 }}
                  animate={{ width: 96 }}
-                 transition={{ ...smoothTransition, delay: 1.2 }}
+                 transition={{ ...smoothTransition, delay: 1.7 }}
                />
                <motion.div
                  initial={{ opacity: 0, x: 20 }}
                  animate={{ opacity: 1, x: 0 }}
-                 transition={{ ...smoothTransition, delay: 1.3 }}
+                 transition={{ ...smoothTransition, delay: 1.8 }}
                >
                  <p className="text-sm font-mono tracking-widest">DIGITAL PORTFOLIO</p>
                  <p className="text-sm font-mono tracking-widest text-gray-500">2024 - 2025</p>
@@ -362,7 +362,7 @@ const Hero: React.FC = () => {
                  className="text-sm max-w-[250px] mt-4 text-left md:text-right text-gray-400 font-light"
                  initial={{ opacity: 0 }}
                  animate={{ opacity: 1 }}
-                 transition={{ ...smoothTransition, delay: 1.5 }}
+                 transition={{ ...smoothTransition, delay: 2.0 }}
                >
                  Crafting immersive digital experiences through code, motion, and design.
                </motion.p>
@@ -375,7 +375,7 @@ const Hero: React.FC = () => {
         className="absolute bottom-10 left-1/2 -translate-x-1/2 flex flex-col items-center gap-2"
         initial={{ opacity: 0, y: -20 }}
         animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 2, duration: 1 }}
+        transition={{ delay: 2.2, duration: 1 }}
       >
         <span className="text-[10px] uppercase tracking-[0.2em] text-gray-500">Scroll</span>
         <motion.div 

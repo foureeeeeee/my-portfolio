@@ -107,8 +107,10 @@ const MatrixLoader: React.FC<MatrixLoaderProps> = ({ onLoadingComplete }) => {
     <motion.div 
       className="fixed inset-0 z-[100] bg-[#050505] flex items-center justify-center overflow-hidden"
       exit={{ 
-          opacity: 0, 
-          transition: { duration: 0.8, ease: "easeInOut" } 
+          opacity: 0,
+          scale: 1.1,
+          filter: "blur(10px)",
+          transition: { duration: 1.2, ease: [0.22, 1, 0.36, 1] } 
       }}
     >
         {/* 1. Fullscreen Matrix Canvas */}

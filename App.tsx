@@ -34,7 +34,7 @@ const App: React.FC = () => {
 
   return (
     <>
-      <AnimatePresence>
+      <AnimatePresence mode="wait">
         {loading && <MatrixLoader onLoadingComplete={() => setLoading(false)} />}
       </AnimatePresence>
 
@@ -71,9 +71,10 @@ const App: React.FC = () => {
         {view === 'home' && !loading && (
           <motion.main 
             key="home-page"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
+            initial={{ opacity: 0, scale: 1.02, filter: "blur(5px)" }}
+            animate={{ opacity: 1, scale: 1, filter: "blur(0px)" }}
+            exit={{ opacity: 0, scale: 0.95, filter: "blur(5px)" }}
+            transition={{ duration: 1.2, ease: [0.22, 1, 0.36, 1] }}
             className="bg-[#050505] min-h-screen text-white selection:bg-purple-500/30 selection:text-purple-200 overflow-x-hidden"
           >
             <CustomCursor />
@@ -163,7 +164,6 @@ const App: React.FC = () => {
             </section>
 
             {/* World Map Teaser Section */}
-            {/* We keep a static or simpler version here, or acts as a portal */}
             <section className="relative h-[60vh] overflow-hidden flex flex-col items-center justify-center bg-black border-y border-white/10">
                 <div className="absolute inset-0 z-0 opacity-50 pointer-events-none grayscale">
                     <WorldMap locations={portfolioData.travels} />
