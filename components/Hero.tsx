@@ -130,8 +130,11 @@ const Hero: React.FC = () => {
     offset: ["start start", "end start"]
   });
 
-  const y = useTransform(scrollYProgress, [0, 1], [0, 200]);
-  const opacity = useTransform(scrollYProgress, [0, 0.5], [1, 0]);
+  // Updated Scroll Transitions for smoother handoff to Marquee
+  const y = useTransform(scrollYProgress, [0, 1], [0, 100]);
+  const opacity = useTransform(scrollYProgress, [0.6, 0.95], [1, 0]); // Fades out later
+  const scale = useTransform(scrollYProgress, [0, 1], [1, 0.95]); // Subtle shrink
+  const blur = useTransform(scrollYProgress, [0.6, 1], ["0px", "8px"]); // Blur out
 
   useEffect(() => {
     const handleMouseMove = (e: MouseEvent) => {
@@ -175,7 +178,6 @@ const Hero: React.FC = () => {
     }
   };
 
-  // Gradient Sweep for "Lamination" effect
   const laminationVariants: Variants = {
     hover: {
         backgroundPosition: ["0% center", "200% center"],
@@ -221,7 +223,7 @@ const Hero: React.FC = () => {
       />
 
       <motion.div 
-        style={{ y, opacity }}
+        style={{ y, opacity, scale, filter: useTransform(blur, (v) => `blur(${v})`) }}
         className="relative z-10 w-full max-w-7xl mx-auto grid grid-cols-1 md:grid-cols-12 gap-12 items-center"
       >
         <div className="md:col-span-8">
@@ -376,6 +378,7 @@ const Hero: React.FC = () => {
         initial={{ opacity: 0, y: -20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 2.2, duration: 1 }}
+        style={{ opacity: useTransform(scrollYProgress, [0, 0.1], [1, 0]) }}
       >
         <span className="text-[10px] uppercase tracking-[0.2em] text-gray-500">Scroll</span>
         <motion.div 
