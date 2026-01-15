@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState, useMemo } from 'react';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Search, Image as ImageIcon, MapPin, X, Globe, Upload } from 'lucide-react';
+import { Search, MapPin, X, Globe, Upload, Maximize2, Calendar, Info } from 'lucide-react';
 import { TravelLocation } from '../types';
 
 // --- MATH & COORDINATE CORRECTION HELPERS ---
@@ -125,7 +125,11 @@ const WorldMap: React.FC<WorldMapProps> = ({ locations = [] }) => {
   // UI Interaction State
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedRegion, setSelectedRegion] = useState<any | null>(null);
+  const [selectedLocation, setSelectedLocation] = useState<TravelLocation | null>(null);
   const [photos, setPhotos] = useState<{id: number, url: string, pos: THREE.Vector3}[]>([]);
+  
+  // Lightbox State
+  const [lightboxImage, setLightboxImage] = useState<string | null>(null);
   
   // --- INITIALIZATION ---
   useEffect(() => {
@@ -184,11 +188,10 @@ const WorldMap: React.FC<WorldMapProps> = ({ locations = [] }) => {
         ctx.fillRect(0, 0, 2048, 1024);
         
         // Draw Projection Grid using Inverse Mercator Logic
-        // We simulate re-projecting a grid to prove alignment math
         ctx.strokeStyle = '#1a1a1a';
         ctx.lineWidth = 1;
 
-        // Draw longitude lines (Equirectangular is linear X)
+        // Draw longitude lines
         for(let i = 0; i < 2048; i+=64) {
             ctx.beginPath();
             ctx.moveTo(i, 0);
@@ -276,7 +279,73 @@ const WorldMap: React.FC<WorldMapProps> = ({ locations = [] }) => {
     };
   }, []);
 
-  // --- DATA LOADING & PROCESSING ---
+  // --- INTERACTION: Raycaster for Markers ---
+  useEffect(() => {
+    const handleMouseClick = (event: MouseEvent) => {
+        if (!containerRef.current || !cameraRef.current || !globeRef.current) return;
+        
+        // Don't trigger if clicking on UI overlay
+        if ((event.target as HTMLElement).closest('.ui-layer')) return;
+
+        const rect = containerRef.current.getBoundingClientRect();
+        const mouse = new THREE.Vector2(
+            ((event.clientX - rect.left) / rect.width) * 2 - 1,
+            -((event.clientY - rect.top) / rect.height) * 2 + 1
+        );
+
+        const raycaster = new THREE.Raycaster();
+        raycaster.setFromCamera(mouse, cameraRef.current);
+
+        // Filter for Sprites only
+        const sprites: THREE.Object3D[] = [];
+        globeRef.current.traverse((child) => {
+            if (child.type === 'Sprite') sprites.push(child);
+        });
+
+        const intersects = raycaster.intersectObjects(sprites);
+        if (intersects.length > 0) {
+            const object = intersects[0].object;
+            const locId = object.userData.locationId;
+            const location = locations.find(l => l.id === locId);
+            
+            if (location) {
+                // Fly to location
+                const pos = intersects[0].point.clone().normalize().multiplyScalar(25);
+                flyToPosition(pos);
+                setSelectedLocation(location);
+                setSelectedRegion(null); // Deselect region if any
+            }
+        }
+    };
+
+    const flyToPosition = (targetPos: THREE.Vector3) => {
+        if (!cameraRef.current || !controlsRef.current) return;
+        
+        controlsRef.current.autoRotate = false;
+        
+        const startPos = cameraRef.current.position.clone();
+        const startTime = Date.now();
+        const duration = 1200;
+
+        const animateFly = () => {
+            const now = Date.now();
+            const p = Math.min((now - startTime) / duration, 1);
+            const ease = 1 - Math.pow(1 - p, 3);
+            
+            cameraRef.current?.position.copy(startPos).lerp(targetPos, ease);
+            cameraRef.current?.lookAt(0, 0, 0);
+
+            if (p < 1) requestAnimationFrame(animateFly);
+            else controlsRef.current!.enabled = true;
+        };
+        animateFly();
+    };
+
+    containerRef.current?.addEventListener('click', handleMouseClick);
+    return () => containerRef.current?.removeEventListener('click', handleMouseClick);
+  }, [locations]);
+
+  // --- DATA LOADING ---
   useEffect(() => {
     const loadGeoData = async () => {
         try {
@@ -288,19 +357,13 @@ const WorldMap: React.FC<WorldMapProps> = ({ locations = [] }) => {
             const chinaRes = await fetch('https://geo.datav.aliyun.com/areas_v3/bound/100000_full.json');
             const chinaJson = await chinaRes.json();
 
-            setLoadingText("Applying Coordinate Correction (GCJ-02 -> WGS-84)...");
+            setLoadingText("Applying Coordinate Correction...");
             
-            // Filter out China from World Map
             const features = worldJson.features.filter((f: any) => f.properties.name !== 'China');
-
-            // Process China Data (Correct Coordinates)
             const chinaFeatures = chinaJson.features.map((f: any) => {
-                const geometry = JSON.parse(JSON.stringify(f.geometry)); // Deep copy
-                
-                // Helper to check validity
+                const geometry = JSON.parse(JSON.stringify(f.geometry));
                 const isValid = (coord: number[]) => !isNaN(coord[0]) && !isNaN(coord[1]);
 
-                // Apply correction to geometries
                 if (geometry.type === 'Polygon') {
                     geometry.coordinates = geometry.coordinates.map((ring: any) => 
                         ring.map((pt: any) => isValid(pt) ? gcj02towgs84(pt[0], pt[1]) : [0,0])
@@ -316,12 +379,10 @@ const WorldMap: React.FC<WorldMapProps> = ({ locations = [] }) => {
                 return { ...f, geometry };
             });
 
-            // Merge
             const finalFeatures = [...features, ...chinaFeatures];
             setGeoData(finalFeatures);
             
             setLoadingText("Constructing 3D Geometry...");
-            // Create 3D Meshes from GeoJSON
             drawMap(finalFeatures);
             
             setIsLoading(false);
@@ -334,45 +395,42 @@ const WorldMap: React.FC<WorldMapProps> = ({ locations = [] }) => {
     loadGeoData();
   }, []);
 
-  // --- RENDER EXISTING LOCATIONS ---
+  // --- RENDER LOCATIONS ---
   useEffect(() => {
     if (locations.length > 0 && globeRef.current) {
+        // Clear old markers if we re-run this (though locations usually stable)
+        // Ideally we group them and clear the group. For now assume additive is okay or clean up later.
+        
         locations.forEach(loc => {
-            // Guard against NaN
             let lat = loc.lat;
             let lon = loc.lng;
             
-            // Legacy/fallback logic
             if ((lat === undefined || isNaN(lat)) && loc.x !== undefined) {
                lon = (loc.x / 100) * 360 - 180;
                lat = 90 - (loc.y / 100) * 180;
             }
-            if (isNaN(lat) || isNaN(lon)) return; // Skip invalid
+            if (isNaN(lat) || isNaN(lon)) return;
 
             const pos = latLonToVector3(lat, lon, 10.2);
             if (isNaN(pos.x) || isNaN(pos.y) || isNaN(pos.z)) return;
 
-            if (loc.images && loc.images.length > 0) {
-                const texture = new THREE.TextureLoader().load(loc.images[0]);
-                const material = new THREE.SpriteMaterial({ map: texture });
-                const sprite = new THREE.Sprite(material);
-                sprite.position.copy(pos);
-                sprite.scale.set(1.5, 1.5, 1.5);
-                
-                const lineGeo = new THREE.BufferGeometry().setFromPoints([
-                    pos.clone().normalize().multiplyScalar(10),
-                    pos
-                ]);
-                const line = new THREE.Line(lineGeo, new THREE.LineBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.5 }));
-                
-                globeRef.current?.add(sprite);
-                globeRef.current?.add(line);
-                
-                setPhotos(prev => {
-                    if (prev.find(p => p.id === loc.id)) return prev;
-                    return [...prev, { id: loc.id, url: loc.images[0], pos }];
-                });
-            }
+            // Create Interactive Marker
+            const texture = new THREE.TextureLoader().load(loc.images[0] || 'https://via.placeholder.com/64');
+            const material = new THREE.SpriteMaterial({ map: texture, transparent: true });
+            const sprite = new THREE.Sprite(material);
+            sprite.position.copy(pos);
+            sprite.scale.set(1.5, 1.5, 1.5);
+            sprite.userData = { locationId: loc.id }; // Important for raycasting
+            
+            // Connecting line
+            const lineGeo = new THREE.BufferGeometry().setFromPoints([
+                pos.clone().normalize().multiplyScalar(10),
+                pos
+            ]);
+            const line = new THREE.Line(lineGeo, new THREE.LineBasicMaterial({ color: 0x4ade80, transparent: true, opacity: 0.5 }));
+            
+            globeRef.current?.add(sprite);
+            globeRef.current?.add(line);
         });
     }
   }, [locations, isLoading]); 
@@ -380,8 +438,6 @@ const WorldMap: React.FC<WorldMapProps> = ({ locations = [] }) => {
   const drawMap = (features: any[]) => {
       if (!globeRef.current) return;
       const radius = 10;
-
-      // Group for all lines to optimize render
       const material = new THREE.LineBasicMaterial({ color: 0x4ade80, transparent: true, opacity: 0.3 });
       
       features.forEach((feature) => {
@@ -412,29 +468,15 @@ const WorldMap: React.FC<WorldMapProps> = ({ locations = [] }) => {
       });
   };
 
-  // --- INTERACTION LOGIC ---
-
   const flyToRegion = (feature: any) => {
       if (!controlsRef.current || !cameraRef.current) return;
       
-      // Calculate Centroid
       let center = [0, 0];
       if (feature.properties.center) {
           center = feature.properties.center; 
       } else {
-          // Calculate centroid from bbox or geometry approximation
-          let coords = feature.geometry.coordinates[0];
-          if(feature.geometry.type === 'MultiPolygon') coords = coords[0][0];
-          // Take simple average of first ring for smoother target
-          let sumLon = 0, sumLat = 0;
-          let validCount = 0;
-          coords.forEach((c: number[]) => { 
-              if(!isNaN(c[0]) && !isNaN(c[1])) {
-                  sumLon += c[0]; sumLat += c[1]; 
-                  validCount++;
-              }
-          });
-          if (validCount > 0) center = [sumLon / validCount, sumLat / validCount];
+          const bbox = getBoundingBox(feature.geometry);
+          center = [(bbox.minLng + bbox.maxLng)/2, (bbox.minLat + bbox.maxLat)/2];
       }
 
       if(feature.properties.adcode && outOfChina(center[0], center[1]) === false) {
@@ -444,10 +486,7 @@ const WorldMap: React.FC<WorldMapProps> = ({ locations = [] }) => {
 
       const targetPos = latLonToVector3(center[1], center[0], 25); 
 
-      // Stop auto rotation
       controlsRef.current.autoRotate = false;
-
-      // Simple Animation (Lerp)
       const startPos = cameraRef.current.position.clone();
       const duration = 1500;
       const startTime = Date.now();
@@ -455,9 +494,8 @@ const WorldMap: React.FC<WorldMapProps> = ({ locations = [] }) => {
       const animateFly = () => {
           const now = Date.now();
           const progress = Math.min((now - startTime) / duration, 1);
-          const ease = 1 - Math.pow(1 - progress, 3); // Cubic out
+          const ease = 1 - Math.pow(1 - progress, 3);
 
-          // Spherical Interpolation
           cameraRef.current?.position.copy(startPos).lerp(targetPos, ease);
           cameraRef.current?.lookAt(0, 0, 0);
 
@@ -470,106 +508,12 @@ const WorldMap: React.FC<WorldMapProps> = ({ locations = [] }) => {
 
       animateFly();
       setSelectedRegion(feature);
+      setSelectedLocation(null); // Deselect location
       setSearchQuery(feature.properties.name);
-  };
-
-  const handleSearchSelect = (name: string) => {
-      const feature = geoData.find(f => f.properties.name === name || (f.properties.name && f.properties.name.includes(name)));
-      if (feature) {
-          flyToRegion(feature);
-      }
-  };
-
-  // --- PHOTO SPRITE SYSTEM ---
-
-  const handlePhotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-      if (!selectedRegion || !e.target.files?.[0] || !globeRef.current) return;
-      
-      const file = e.target.files[0];
-      const reader = new FileReader();
-      
-      reader.onload = (event) => {
-          if (!event.target?.result) return;
-          const imgUrl = event.target.result as string;
-          
-          // Optimized Sampling using Bounding Box
-          const bbox = getBoundingBox(selectedRegion.geometry);
-          
-          let validPoint: THREE.Vector3 | null = null;
-          let attempts = 0;
-          const maxAttempts = 500; // Increased attempts
-
-          while (!validPoint && attempts < maxAttempts) {
-              attempts++;
-              
-              // Random Point WITHIN Bounding Box
-              const lat = bbox.minLat + Math.random() * (bbox.maxLat - bbox.minLat);
-              const lon = bbox.minLng + Math.random() * (bbox.maxLng - bbox.minLng);
-
-              // 2. Check if inside polygon
-              const geometry = selectedRegion.geometry;
-              let isInside = false;
-
-              const checkRings = (rings: any[]) => {
-                   return isPointInPolygon([lon, lat], rings[0]);
-              };
-
-              if (geometry.type === 'Polygon') {
-                  isInside = checkRings(geometry.coordinates);
-              } else if (geometry.type === 'MultiPolygon') {
-                  for (let poly of geometry.coordinates) {
-                      if (checkRings(poly)) {
-                          isInside = true;
-                          break;
-                      }
-                  }
-              }
-
-              if (isInside) {
-                   // 3. Collision Check
-                   const candidatePos = latLonToVector3(lat, lon, 10.2); 
-                   let collision = false;
-                   for (let p of photos) {
-                       if (p.pos.distanceTo(candidatePos) < 0.5) { // Reduced collision radius
-                           collision = true;
-                           break;
-                       }
-                   }
-                   if (!collision) {
-                       validPoint = candidatePos;
-                   }
-              }
-          }
-
-          if (validPoint) {
-              const texture = new THREE.TextureLoader().load(imgUrl);
-              const material = new THREE.SpriteMaterial({ map: texture });
-              const sprite = new THREE.Sprite(material);
-              sprite.position.copy(validPoint);
-              sprite.scale.set(1.5, 1.5, 1.5);
-              
-              const lineGeo = new THREE.BufferGeometry().setFromPoints([
-                  validPoint.clone().normalize().multiplyScalar(10),
-                  validPoint
-              ]);
-              const line = new THREE.Line(lineGeo, new THREE.LineBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.5 }));
-              
-              globeRef.current?.add(sprite);
-              globeRef.current?.add(line);
-
-              setPhotos(prev => [...prev, { id: Date.now(), url: imgUrl, pos: validPoint! }]);
-          } else {
-              alert("Could not find a spot. Try again or select a larger region.");
-          }
-      };
-      
-      reader.readAsDataURL(file);
   };
 
   const filteredCountries = useMemo(() => {
       if (!searchQuery || searchQuery.length < 1) return [];
-      // Robust search: English or Chinese
-      // Note: properties.name is typically Chinese in this dataset.
       return geoData
         .filter(f => {
             const name = f.properties.name || "";
@@ -605,128 +549,201 @@ const WorldMap: React.FC<WorldMapProps> = ({ locations = [] }) => {
             )}
         </AnimatePresence>
 
-        {/* --- LEFT PANEL: Search & Selection --- */}
-        <motion.div 
-            className="absolute left-6 top-24 bottom-6 w-80 pointer-events-none flex flex-col gap-4"
-            initial={{ x: -50, opacity: 0 }}
-            animate={{ x: 0, opacity: 1 }}
-            transition={{ delay: 0.5 }}
-        >
-            {/* Glassmorphism Container */}
-            <div className="bg-black/40 backdrop-blur-xl border border-white/10 rounded-2xl p-6 pointer-events-auto flex-1 flex flex-col shadow-2xl">
-                <h2 className="text-xl font-bold mb-1 flex items-center gap-2">
-                    <Globe size={18} className="text-green-500"/>
-                    Global Footprint
-                </h2>
-                <p className="text-xs text-gray-500 mb-6 font-mono">WGS-84 / GCJ-02 DUAL SYSTEM</p>
+        {/* --- UI LAYER --- */}
+        <div className="ui-layer absolute inset-0 pointer-events-none">
+            
+            {/* LEFT PANEL: Search & Selection */}
+            <motion.div 
+                className="absolute left-6 top-24 bottom-6 w-80 pointer-events-auto flex flex-col gap-4"
+                initial={{ x: -50, opacity: 0 }}
+                animate={{ x: 0, opacity: 1 }}
+                transition={{ delay: 0.5 }}
+            >
+                <div className="bg-black/40 backdrop-blur-xl border border-white/10 rounded-2xl p-6 flex-1 flex flex-col shadow-2xl">
+                    <h2 className="text-xl font-bold mb-1 flex items-center gap-2">
+                        <Globe size={18} className="text-green-500"/>
+                        Global Footprint
+                    </h2>
+                    <p className="text-xs text-gray-500 mb-6 font-mono">WGS-84 / GCJ-02 DUAL SYSTEM</p>
 
-                {/* Search */}
-                <div className="relative mb-6">
-                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={16} />
-                    <input 
-                        type="text" 
-                        value={searchQuery}
-                        onChange={(e) => setSearchQuery(e.target.value)}
-                        placeholder="Search World..."
-                        className="w-full bg-white/5 border border-white/10 rounded-lg pl-10 pr-4 py-3 text-sm focus:outline-none focus:border-green-500 transition-colors"
-                    />
-                    {/* Results Dropdown */}
-                    {filteredCountries.length > 0 && searchQuery !== selectedRegion?.properties.name && (
-                        <div className="absolute top-full left-0 w-full bg-gray-900/90 border border-white/10 mt-2 rounded-lg overflow-hidden z-20 max-h-60 overflow-y-auto">
-                            {filteredCountries.map((f, i) => (
-                                <button
-                                    key={i}
-                                    onClick={() => flyToRegion(f)}
-                                    className="w-full text-left px-4 py-2 hover:bg-white/10 text-sm flex justify-between items-center"
-                                >
-                                    <span>{f.properties.name}</span>
-                                    <span className="text-[10px] text-gray-500 font-mono uppercase">FLY_TO</span>
-                                </button>
-                            ))}
-                        </div>
-                    )}
-                </div>
+                    {/* Search Input */}
+                    <div className="relative mb-6">
+                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={16} />
+                        <input 
+                            type="text" 
+                            value={searchQuery}
+                            onChange={(e) => setSearchQuery(e.target.value)}
+                            placeholder="Search World..."
+                            className="w-full bg-white/5 border border-white/10 rounded-lg pl-10 pr-4 py-3 text-sm focus:outline-none focus:border-green-500 transition-colors"
+                        />
+                        {filteredCountries.length > 0 && searchQuery !== selectedRegion?.properties.name && (
+                            <div className="absolute top-full left-0 w-full bg-gray-900/90 border border-white/10 mt-2 rounded-lg overflow-hidden z-20 max-h-60 overflow-y-auto">
+                                {filteredCountries.map((f, i) => (
+                                    <button
+                                        key={i}
+                                        onClick={() => flyToRegion(f)}
+                                        className="w-full text-left px-4 py-2 hover:bg-white/10 text-sm flex justify-between items-center"
+                                    >
+                                        <span>{f.properties.name}</span>
+                                        <span className="text-[10px] text-gray-500 font-mono uppercase">FLY_TO</span>
+                                    </button>
+                                ))}
+                            </div>
+                        )}
+                    </div>
 
-                {/* Selected Region Info */}
-                <AnimatePresence mode="wait">
-                    {selectedRegion ? (
-                        <motion.div 
-                            key="selected"
-                            initial={{ opacity: 0, y: 10 }}
-                            animate={{ opacity: 1, y: 0 }}
-                            exit={{ opacity: 0, y: -10 }}
-                            className="flex-1 flex flex-col"
-                        >
-                            <div className="flex justify-between items-start mb-4 border-b border-white/10 pb-4">
-                                <div>
-                                    <h3 className="text-2xl font-bold text-white">{selectedRegion.properties.name}</h3>
-                                    <p className="text-green-400 text-xs font-mono mt-1">
-                                        ID: {selectedRegion.properties.adcode || selectedRegion.id || 'N/A'}
+                    {/* Content Area for Region/Location */}
+                    <AnimatePresence mode="wait">
+                        {selectedLocation ? (
+                            // LOCATION DETAIL CARD
+                            <motion.div 
+                                key="location"
+                                initial={{ opacity: 0, x: -20 }}
+                                animate={{ opacity: 1, x: 0 }}
+                                exit={{ opacity: 0, x: -20 }}
+                                className="flex-1 flex flex-col"
+                            >
+                                <div className="flex justify-between items-start mb-4">
+                                    <h3 className="text-2xl font-bold text-white">{selectedLocation.name}</h3>
+                                    <button onClick={() => { setSelectedLocation(null); controlsRef.current!.autoRotate = true; }} className="p-1 hover:bg-white/10 rounded">
+                                        <X size={16} />
+                                    </button>
+                                </div>
+                                
+                                <div className="flex items-center gap-2 text-green-400 font-mono text-xs mb-4">
+                                    <Calendar size={12} />
+                                    <span>{selectedLocation.date}</span>
+                                    <span className="text-gray-600">|</span>
+                                    <MapPin size={12} />
+                                    <span>{selectedLocation.lat.toFixed(2)}, {selectedLocation.lng.toFixed(2)}</span>
+                                </div>
+
+                                <p className="text-gray-300 text-sm leading-relaxed mb-6">
+                                    {selectedLocation.description || "No description available for this coordinate."}
+                                </p>
+
+                                <div className="grid grid-cols-2 gap-2 mt-auto">
+                                    {selectedLocation.images.map((img, i) => (
+                                        <div 
+                                            key={i} 
+                                            className="group relative aspect-video bg-gray-800 rounded overflow-hidden cursor-zoom-in border border-white/10 hover:border-white/50 transition-all"
+                                            onClick={() => setLightboxImage(img)}
+                                        >
+                                            <img src={img} className="w-full h-full object-cover opacity-80 group-hover:opacity-100 transition-opacity" alt="travel" />
+                                            <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 bg-black/40 transition-opacity">
+                                                <Maximize2 size={16} className="text-white" />
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            </motion.div>
+                        ) : selectedRegion ? (
+                            // REGION DETAIL CARD
+                            <motion.div 
+                                key="region"
+                                initial={{ opacity: 0 }}
+                                animate={{ opacity: 1 }}
+                                exit={{ opacity: 0 }}
+                                className="flex-1 flex flex-col"
+                            >
+                                <div className="flex justify-between items-start mb-4 border-b border-white/10 pb-4">
+                                    <div>
+                                        <h3 className="text-2xl font-bold text-white">{selectedRegion.properties.name}</h3>
+                                        <p className="text-green-400 text-xs font-mono mt-1">
+                                            REGION_ID: {selectedRegion.properties.adcode || 'UNK'}
+                                        </p>
+                                    </div>
+                                    <button onClick={() => { setSelectedRegion(null); setSearchQuery(''); controlsRef.current!.autoRotate = true; }} className="p-1 hover:bg-white/10 rounded">
+                                        <X size={16} />
+                                    </button>
+                                </div>
+                                <div className="flex-1 flex flex-col items-center justify-center text-center p-4 border border-dashed border-white/20 rounded-lg bg-white/5">
+                                    <div className="w-12 h-12 rounded-full bg-white/10 flex items-center justify-center mb-3">
+                                        <Upload size={20} className="text-gray-400" />
+                                    </div>
+                                    <p className="text-sm font-medium">Memory Slot Empty</p>
+                                    <p className="text-xs text-gray-500 mt-2">
+                                        Upload capability restricted in preview mode.
                                     </p>
                                 </div>
-                                <button onClick={() => { setSelectedRegion(null); setSearchQuery(''); controlsRef.current!.autoRotate = true; }} className="p-1 hover:bg-white/10 rounded">
-                                    <X size={16} />
-                                </button>
-                            </div>
-
-                            {/* Photo Upload Area */}
-                            <div className="flex-1 relative border border-dashed border-white/20 rounded-lg bg-white/5 hover:bg-white/10 transition-colors group cursor-pointer overflow-hidden flex flex-col items-center justify-center text-center p-4">
-                                <input 
-                                    type="file" 
-                                    accept="image/*"
-                                    onChange={handlePhotoUpload}
-                                    className="absolute inset-0 opacity-0 cursor-pointer z-10"
-                                />
-                                <div className="w-12 h-12 rounded-full bg-green-500/20 flex items-center justify-center mb-3 group-hover:scale-110 transition-transform">
-                                    <Upload size={20} className="text-green-400" />
+                            </motion.div>
+                        ) : (
+                            // DEFAULT STATE
+                            <motion.div 
+                                key="empty"
+                                initial={{ opacity: 0 }}
+                                animate={{ opacity: 1 }}
+                                className="flex-1 flex flex-col items-center justify-center text-gray-600 space-y-4"
+                            >
+                                <Globe size={48} className="opacity-20 text-green-500" />
+                                <div className="text-center">
+                                    <p className="text-sm text-gray-400 mb-1">Interactive Map System</p>
+                                    <p className="text-xs text-gray-600">Select markers or search regions</p>
                                 </div>
-                                <p className="text-sm font-medium">Upload Memory</p>
-                                <p className="text-xs text-gray-500 mt-2 px-4">
-                                    Selected image will be randomly projected within region boundaries.
-                                </p>
-                            </div>
-                        </motion.div>
-                    ) : (
-                        <motion.div 
-                            key="empty"
-                            initial={{ opacity: 0 }}
-                            animate={{ opacity: 1 }}
-                            className="flex-1 flex flex-col items-center justify-center text-gray-600 space-y-4"
-                        >
-                            <MapPin size={48} className="opacity-20" />
-                            <p className="text-sm">Select a region to view or add memories.</p>
-                        </motion.div>
-                    )}
-                </AnimatePresence>
-            </div>
-        </motion.div>
+                            </motion.div>
+                        )}
+                    </AnimatePresence>
+                </div>
+            </motion.div>
 
-        {/* --- RIGHT PANEL: Stats --- */}
-        <motion.div 
-            className="absolute right-6 top-24 w-64 pointer-events-none"
-            initial={{ x: 50, opacity: 0 }}
-            animate={{ x: 0, opacity: 1 }}
-            transition={{ delay: 0.7 }}
-        >
-             <div className="bg-black/40 backdrop-blur-xl border border-white/10 rounded-2xl p-6 pointer-events-auto">
-                 <h3 className="text-xs font-mono text-gray-500 tracking-widest uppercase mb-4">Travel Stats</h3>
-                 <div className="space-y-4">
-                    <div className="flex justify-between items-center">
-                        <span className="text-sm text-gray-300">Regions Visited</span>
-                        <span className="text-xl font-bold font-mono text-white">{photos.length}</span>
+            {/* RIGHT PANEL: Stats (Only show if no location selected to avoid clutter) */}
+            {!selectedLocation && (
+                <motion.div 
+                    className="absolute right-6 top-24 w-64 pointer-events-auto"
+                    initial={{ x: 50, opacity: 0 }}
+                    animate={{ x: 0, opacity: 1 }}
+                    transition={{ delay: 0.7 }}
+                >
+                    <div className="bg-black/40 backdrop-blur-xl border border-white/10 rounded-2xl p-6">
+                        <h3 className="text-xs font-mono text-gray-500 tracking-widest uppercase mb-4">Database</h3>
+                        <div className="space-y-4">
+                            <div className="flex justify-between items-center">
+                                <span className="text-sm text-gray-300">Logged Locations</span>
+                                <span className="text-xl font-bold font-mono text-white">{locations.length}</span>
+                            </div>
+                            <div className="h-[1px] bg-white/10 my-2"></div>
+                            <div className="text-[10px] text-gray-600 leading-relaxed">
+                                <span className="flex items-center gap-2">
+                                    <div className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse"></div>
+                                    System Online
+                                </span>
+                            </div>
+                        </div>
                     </div>
-                    <div className="flex justify-between items-center">
-                        <span className="text-sm text-gray-300">Total Memories</span>
-                        <span className="text-xl font-bold font-mono text-green-400">{photos.length}</span>
+                </motion.div>
+            )}
+        </div>
+
+        {/* --- FULL SCREEN LIGHTBOX --- */}
+        <AnimatePresence>
+            {lightboxImage && (
+                <motion.div 
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    exit={{ opacity: 0 }}
+                    className="fixed inset-0 z-[100] bg-black/95 flex items-center justify-center p-4 md:p-12 cursor-zoom-out"
+                    onClick={() => setLightboxImage(null)}
+                >
+                    <motion.img 
+                        src={lightboxImage} 
+                        initial={{ scale: 0.9 }}
+                        animate={{ scale: 1 }}
+                        exit={{ scale: 0.9 }}
+                        className="max-w-full max-h-full object-contain rounded shadow-2xl border border-white/10"
+                        onClick={(e) => e.stopPropagation()} // Prevent closing when clicking image
+                    />
+                    <button 
+                        onClick={() => setLightboxImage(null)}
+                        className="absolute top-6 right-6 p-2 bg-white/10 hover:bg-white/20 rounded-full text-white transition-colors"
+                    >
+                        <X size={24} />
+                    </button>
+                    <div className="absolute bottom-6 left-1/2 -translate-x-1/2 text-white/50 text-sm font-mono tracking-widest">
+                        IMAGE_PREVIEW_MODE
                     </div>
-                    <div className="h-[1px] bg-white/10 my-2"></div>
-                    <div className="text-[10px] text-gray-600 leading-relaxed">
-                        Projection Resampling: <span className="text-green-500">Active</span><br/>
-                        Boundaries: <span className="text-green-500">Merged (World+CN)</span>
-                    </div>
-                 </div>
-             </div>
-        </motion.div>
+                </motion.div>
+            )}
+        </AnimatePresence>
 
     </section>
   );

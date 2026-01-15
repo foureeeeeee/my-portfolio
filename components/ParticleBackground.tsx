@@ -19,6 +19,8 @@ const ParticleBackground: React.FC = () => {
     const particleCount = 100;
 
     let mouse = { x: -1000, y: -1000 };
+    let lastScrollY = window.scrollY;
+    let scrollVelocity = 0;
 
     class Particle {
       x: number;
@@ -33,20 +35,28 @@ const ParticleBackground: React.FC = () => {
         this.x = Math.random() * width;
         this.y = Math.random() * height;
         this.size = Math.random() * 2 + 1;
-        // Basic drift
         this.vx = (Math.random() - 0.5) * 0.5;
         this.vy = (Math.random() - 0.5) * 0.5;
-        
         this.alpha = Math.random() * 0.5 + 0.3;
-        this.color = ''; // Set in update
-        this.updateColor(); // Initial color set
+        this.color = '';
+        this.updateColor();
       }
 
       draw() {
         if (!ctx) return;
         ctx.fillStyle = this.color;
         ctx.beginPath();
-        ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
+        
+        // Stretch effect based on scroll velocity ("Lamination" / Streak)
+        // If scrolling fast, stretch the particle vertically
+        const stretch = Math.max(1, Math.min(Math.abs(scrollVelocity) * 1.5, 40));
+        
+        if (stretch > 1.2) {
+             // Draw streak
+             ctx.ellipse(this.x, this.y, this.size, this.size * stretch, 0, 0, Math.PI * 2);
+        } else {
+             ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
+        }
         ctx.fill();
       }
 
@@ -56,12 +66,12 @@ const ParticleBackground: React.FC = () => {
 
         // Gradient: Purple (168, 85, 247) -> Green (34, 197, 94) -> Blue (59, 130, 246)
         if (p <= 0.5) {
-            const t = p * 2; // Normalize 0-0.5 to 0-1
+            const t = p * 2; 
             r = 168 + (34 - 168) * t;
             g = 85 + (197 - 85) * t;
             b = 247 + (94 - 247) * t;
         } else {
-            const t = (p - 0.5) * 2; // Normalize 0.5-1 to 0-1
+            const t = (p - 0.5) * 2; 
             r = 34 + (59 - 34) * t;
             g = 197 + (130 - 197) * t;
             b = 94 + (246 - 94) * t;
@@ -82,17 +92,17 @@ const ParticleBackground: React.FC = () => {
           const forceDirectionY = dy / distance;
           const force = (maxDistance - distance) / maxDistance;
           
-          // Repulsion force
           const strength = 3; 
           this.vx -= forceDirectionX * force * strength * 0.1;
           this.vy -= forceDirectionY * force * strength * 0.1;
         }
 
-        // Move
+        // Apply Scroll Force ("Drawing Down" effect)
+        // Move particles vertically based on scroll velocity to create the "flow"
+        this.y += this.vy + (scrollVelocity * 0.5); 
         this.x += this.vx;
-        this.y += this.vy;
 
-        // Friction to keep them from going too fast indefinitely
+        // Friction
         const speed = Math.sqrt(this.vx * this.vx + this.vy * this.vy);
         const maxSpeed = 3;
         if (speed > maxSpeed) {
@@ -119,8 +129,17 @@ const ParticleBackground: React.FC = () => {
 
     const animate = () => {
       // Trail effect: instead of clearing completely, draw a semi-transparent black rect
-      ctx.fillStyle = 'rgba(5, 5, 5, 0.2)'; 
+      // When scrolling fast, use lower alpha to create longer, smoother trails ("lamination")
+      const baseAlpha = 0.2;
+      const velocityFactor = Math.min(Math.abs(scrollVelocity) * 0.01, 0.15); // max 0.15 reduction
+      const currentAlpha = Math.max(0.05, baseAlpha - velocityFactor);
+      
+      ctx.fillStyle = `rgba(5, 5, 5, ${currentAlpha})`; 
       ctx.fillRect(0, 0, width, height);
+      
+      // Decay scroll velocity (Inertia)
+      scrollVelocity *= 0.92;
+      if (Math.abs(scrollVelocity) < 0.1) scrollVelocity = 0;
       
       particles.forEach(particle => {
         particle.update();
@@ -143,14 +162,23 @@ const ParticleBackground: React.FC = () => {
         mouse.x = e.clientX;
         mouse.y = e.clientY;
     };
+    
+    const handleScroll = () => {
+        const currentY = window.scrollY;
+        // Calculate velocity (difference in scroll position)
+        scrollVelocity = currentY - lastScrollY;
+        lastScrollY = currentY;
+    };
 
     window.addEventListener('resize', handleResize);
     window.addEventListener('mousemove', handleMouseMove);
+    window.addEventListener('scroll', handleScroll);
 
     return () => {
       cancelAnimationFrame(animationFrameId);
       window.removeEventListener('resize', handleResize);
       window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('scroll', handleScroll);
     };
   }, []);
 

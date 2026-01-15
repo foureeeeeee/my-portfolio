@@ -38,12 +38,15 @@ const App: React.FC = () => {
         {loading && <MatrixLoader onLoadingComplete={() => setLoading(false)} />}
       </AnimatePresence>
 
+      {/* Global Cursor lifted to root to avoid stacking context issues */}
+      {!loading && <CustomCursor />}
+
       <AnimatePresence>
         {showAdmin && (
           <AdminPortal 
             isOpen={showAdmin} 
             onClose={() => setShowAdmin(false)} 
-            data={portfolioData}
+            data={portfolioData} 
             onUpdate={handleDataUpdate}
           />
         )}
@@ -59,7 +62,6 @@ const App: React.FC = () => {
                 exit={{ opacity: 0 }}
                 className="relative z-50"
             >
-                <CustomCursor />
                 <TravelPage 
                     locations={portfolioData.travels} 
                     onBack={() => setView('home')} 
@@ -77,7 +79,6 @@ const App: React.FC = () => {
             transition={{ duration: 1.2, ease: [0.22, 1, 0.36, 1] }}
             className="bg-[#050505] min-h-screen text-white selection:bg-purple-500/30 selection:text-purple-200 overflow-x-hidden"
           >
-            <CustomCursor />
             <NoiseOverlay />
             
             {/* Navbar */}
@@ -163,18 +164,25 @@ const App: React.FC = () => {
                </div>
             </section>
 
-            {/* World Map Teaser Section */}
-            <section className="relative h-[60vh] overflow-hidden flex flex-col items-center justify-center bg-black border-y border-white/10">
-                <div className="absolute inset-0 z-0 opacity-50 pointer-events-none grayscale">
+            {/* World Map Teaser Section - Now Interactive */}
+            <section className="relative h-[80vh] overflow-hidden flex flex-col items-center justify-center bg-black border-y border-white/10 group">
+                <div className="absolute inset-0 z-0 opacity-70 transition-opacity duration-700">
                     <WorldMap locations={portfolioData.travels} />
                 </div>
-                <div className="relative z-10 text-center">
-                    <h2 className="text-4xl md:text-6xl font-bold mb-6">GLOBAL FOOTPRINT</h2>
+                {/* Overlay that fades out on hover to encourage interaction */}
+                <div className="relative z-10 text-center pointer-events-none opacity-100 group-hover:opacity-0 transition-opacity duration-500">
+                    <h2 className="text-4xl md:text-6xl font-bold mb-6 drop-shadow-2xl">GLOBAL FOOTPRINT</h2>
+                    <div className="px-8 py-3 bg-white/10 backdrop-blur-md text-white font-medium rounded-full flex items-center gap-2 mx-auto border border-white/20">
+                         <Globe size={18} /> EXPLORE MAP
+                    </div>
+                </div>
+                {/* Dedicated full screen button at bottom */}
+                <div className="absolute bottom-8 left-1/2 -translate-x-1/2 z-20 pointer-events-auto">
                     <button 
                         onClick={() => setView('travel')}
-                        className="px-8 py-3 bg-white text-black font-medium rounded-full hover:scale-105 transition-transform flex items-center gap-2 mx-auto"
+                        className="text-xs font-mono text-gray-500 hover:text-white transition-colors tracking-widest uppercase flex items-center gap-2"
                     >
-                        ENTER ORBIT <Globe size={18} />
+                        [ Enter Immersive Mode ]
                     </button>
                 </div>
             </section>

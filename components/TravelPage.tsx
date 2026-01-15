@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState, useMemo } from 'react';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ArrowLeft, MapPin, Calendar, Maximize2, X, Navigation } from 'lucide-react';
+import { ArrowLeft, MapPin, Calendar, Maximize2, X, Navigation, ZoomIn } from 'lucide-react';
 import { TravelLocation } from '../types';
 
 interface TravelPageProps {
@@ -13,6 +13,7 @@ interface TravelPageProps {
 const TravelPage: React.FC<TravelPageProps> = ({ locations, onBack }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const [selectedLocation, setSelectedLocation] = useState<TravelLocation | null>(null);
+  const [lightboxImage, setLightboxImage] = useState<string | null>(null);
   const [isGlobeReady, setIsGlobeReady] = useState(false);
   
   // Refs for animation control
@@ -246,10 +247,9 @@ const TravelPage: React.FC<TravelPageProps> = ({ locations, onBack }) => {
         // Animate Aurora
         if (auroraRef.current) {
             (auroraRef.current.material as THREE.ShaderMaterial).uniforms.time.value = performance.now() / 1000;
-            // Aurora rotation
         }
         
-        // Rotate Clouds slightly faster than earth (earth auto-rotates via controls)
+        // Rotate Clouds slightly faster than earth
         if (cloudsRef.current) {
             cloudsRef.current.rotation.y += 0.0005;
         }
@@ -274,6 +274,45 @@ const TravelPage: React.FC<TravelPageProps> = ({ locations, onBack }) => {
     };
   }, []);
 
+  // --- INTERACTION: Raycaster for 3D Markers ---
+  useEffect(() => {
+    const handleMouseClick = (event: MouseEvent) => {
+        if (!containerRef.current || !cameraRef.current || !globeGroupRef.current) return;
+        
+        // Only trigger if not clicking on UI panels
+        if ((event.target as HTMLElement).closest('.ui-panel')) return;
+
+        const rect = containerRef.current.getBoundingClientRect();
+        const mouse = new THREE.Vector2(
+            ((event.clientX - rect.left) / rect.width) * 2 - 1,
+            -((event.clientY - rect.top) / rect.height) * 2 + 1
+        );
+
+        const raycaster = new THREE.Raycaster();
+        raycaster.setFromCamera(mouse, cameraRef.current);
+
+        // Recursive intersect to hit sprites or marker parts
+        const intersects = raycaster.intersectObjects(globeGroupRef.current.children, true);
+        
+        // Find first hit that has our location data
+        const hit = intersects.find(i => i.object.userData && i.object.userData.locationId);
+        
+        if (hit) {
+            const locId = hit.object.userData.locationId;
+            const loc = locations.find(l => l.id === locId);
+            if (loc) {
+                handleLocationClick(loc);
+            }
+        }
+    };
+
+    const el = containerRef.current;
+    if (el) el.addEventListener('click', handleMouseClick);
+    return () => {
+        if (el) el.removeEventListener('click', handleMouseClick);
+    };
+  }, [locations, isGlobeReady]);
+
   // --- ADD LOCATIONS MARKERS ---
   useEffect(() => {
     if (!isGlobeReady || !globeGroupRef.current) return;
@@ -295,7 +334,8 @@ const TravelPage: React.FC<TravelPageProps> = ({ locations, onBack }) => {
         const stickMat = new THREE.MeshBasicMaterial({ color: 0x4ade80, opacity: 0.8, transparent: true });
         const stick = new THREE.Mesh(stickGeo, stickMat);
         stick.lookAt(pos);
-        stick.position.copy(pos); // Base at surface
+        stick.position.copy(pos); 
+        stick.userData = { locationId: loc.id }; // For Raycasting
         
         // Align stick
         const quaternion = new THREE.Quaternion();
@@ -312,6 +352,7 @@ const TravelPage: React.FC<TravelPageProps> = ({ locations, onBack }) => {
             const tipPos = pos.clone().normalize().multiplyScalar(19);
             sprite.position.copy(tipPos);
             sprite.scale.set(3.5, 2.3, 1);
+            sprite.userData = { locationId: loc.id }; // For Raycasting
             
             markerGroup.add(stick);
             markerGroup.add(sprite);
@@ -330,9 +371,7 @@ const TravelPage: React.FC<TravelPageProps> = ({ locations, onBack }) => {
         controlsRef.current.autoRotate = false;
         
         // Calculate a nice viewing position
-        // Vector pointing from center to location
         const locVec = latLonToVector3(loc.lat, loc.lng, 1);
-        // Position camera out along that vector
         const targetPos = locVec.clone().multiplyScalar(35); 
         
         const startPos = cameraRef.current.position.clone();
@@ -357,7 +396,7 @@ const TravelPage: React.FC<TravelPageProps> = ({ locations, onBack }) => {
   return (
     <div className="fixed inset-0 z-50 bg-black">
         {/* 3D Canvas */}
-        <div ref={containerRef} className="absolute inset-0 z-0" />
+        <div ref={containerRef} className="absolute inset-0 z-0 cursor-move" />
 
         {/* UI Overlay */}
         <div className="absolute inset-0 z-10 pointer-events-none flex">
@@ -366,7 +405,7 @@ const TravelPage: React.FC<TravelPageProps> = ({ locations, onBack }) => {
             <motion.div 
                 initial={{ x: -100, opacity: 0 }}
                 animate={{ x: 0, opacity: 1 }}
-                className="w-80 h-full p-6 flex flex-col pointer-events-auto bg-gradient-to-r from-black/80 via-black/40 to-transparent backdrop-blur-sm"
+                className="w-80 h-full p-6 flex flex-col pointer-events-auto bg-gradient-to-r from-black/80 via-black/40 to-transparent backdrop-blur-sm ui-panel"
             >
                 {/* Header */}
                 <div className="mb-8 mt-4">
@@ -425,7 +464,7 @@ const TravelPage: React.FC<TravelPageProps> = ({ locations, onBack }) => {
                             initial={{ opacity: 0, x: 50 }}
                             animate={{ opacity: 1, x: 0 }}
                             exit={{ opacity: 0, x: 50 }}
-                            className="absolute right-12 top-24 w-80 pointer-events-auto"
+                            className="absolute right-12 top-24 w-80 pointer-events-auto ui-panel"
                         >
                             {/* Detailed Card */}
                             <div className="bg-black/60 backdrop-blur-xl border border-white/20 rounded-2xl overflow-hidden shadow-2xl relative">
@@ -433,14 +472,25 @@ const TravelPage: React.FC<TravelPageProps> = ({ locations, onBack }) => {
                                 <div className="absolute top-0 right-0 w-16 h-16 border-t border-r border-green-500/50 rounded-tr-2xl"></div>
                                 <div className="absolute bottom-0 left-0 w-8 h-8 border-b border-l border-white/20 rounded-bl-2xl"></div>
                                 
-                                {/* Image Carousel (Simplified to first image) */}
-                                <div className="relative aspect-video bg-gray-900 group">
+                                {/* Image Carousel (Main) */}
+                                <div 
+                                    className="relative aspect-video bg-gray-900 group cursor-zoom-in"
+                                    onClick={() => setLightboxImage(selectedLocation.images[0])}
+                                >
                                     <img 
                                         src={selectedLocation.images[0]} 
                                         alt={selectedLocation.name}
                                         className="w-full h-full object-cover opacity-80 group-hover:opacity-100 transition-opacity duration-500"
                                     />
                                     <div className="absolute inset-0 bg-gradient-to-t from-black via-transparent to-transparent"></div>
+                                    
+                                    {/* Hover Overlay Icon */}
+                                    <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                                        <div className="w-12 h-12 bg-black/50 backdrop-blur rounded-full flex items-center justify-center border border-white/20">
+                                            <ZoomIn size={20} className="text-white" />
+                                        </div>
+                                    </div>
+
                                     <div className="absolute bottom-3 left-4">
                                         <p className="text-xs font-mono text-green-400 flex items-center gap-2">
                                             <Navigation size={12} className="rotate-45" />
@@ -457,8 +507,12 @@ const TravelPage: React.FC<TravelPageProps> = ({ locations, onBack }) => {
                                     
                                     <div className="grid grid-cols-3 gap-2">
                                         {selectedLocation.images.map((img, i) => (
-                                            <div key={i} className="aspect-square rounded bg-gray-800 overflow-hidden cursor-pointer hover:ring-1 ring-white/50 transition-all">
-                                                <img src={img} className="w-full h-full object-cover" alt="" />
+                                            <div 
+                                                key={i} 
+                                                className="aspect-square rounded bg-gray-800 overflow-hidden cursor-pointer hover:ring-2 ring-green-500/50 transition-all group relative"
+                                                onClick={() => setLightboxImage(img)}
+                                            >
+                                                <img src={img} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" alt="" />
                                             </div>
                                         ))}
                                     </div>
@@ -469,6 +523,38 @@ const TravelPage: React.FC<TravelPageProps> = ({ locations, onBack }) => {
                 </AnimatePresence>
             </div>
         </div>
+
+        {/* --- FULL SCREEN LIGHTBOX --- */}
+        <AnimatePresence>
+            {lightboxImage && (
+                <motion.div 
+                    initial={{ opacity: 0, backdropFilter: "blur(0px)" }}
+                    animate={{ opacity: 1, backdropFilter: "blur(20px)" }}
+                    exit={{ opacity: 0, backdropFilter: "blur(0px)" }}
+                    className="fixed inset-0 z-[100] bg-black/90 flex items-center justify-center p-4 md:p-12 cursor-zoom-out"
+                    onClick={() => setLightboxImage(null)}
+                >
+                    <motion.img 
+                        src={lightboxImage} 
+                        initial={{ scale: 0.8, opacity: 0 }}
+                        animate={{ scale: 1, opacity: 1 }}
+                        exit={{ scale: 0.8, opacity: 0 }}
+                        transition={{ type: "spring", damping: 25, stiffness: 300 }}
+                        className="max-w-full max-h-[90vh] object-contain rounded shadow-2xl border border-white/10"
+                        onClick={(e) => e.stopPropagation()} 
+                    />
+                    <button 
+                        onClick={() => setLightboxImage(null)}
+                        className="absolute top-8 right-8 p-3 bg-white/10 hover:bg-white/20 rounded-full text-white transition-colors backdrop-blur-md"
+                    >
+                        <X size={24} />
+                    </button>
+                    <div className="absolute bottom-8 left-1/2 -translate-x-1/2 text-white/50 text-xs font-mono tracking-widest uppercase bg-black/50 px-4 py-2 rounded-full backdrop-blur-sm border border-white/5">
+                        High Res Visuals // Click anywhere to close
+                    </div>
+                </motion.div>
+            )}
+        </AnimatePresence>
 
         {/* Global Overlay Elements */}
         <div className="absolute top-0 left-0 w-full h-24 bg-gradient-to-b from-black to-transparent pointer-events-none z-20"></div>
