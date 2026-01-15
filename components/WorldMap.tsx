@@ -347,15 +347,29 @@ const WorldMap: React.FC<WorldMapProps> = ({ locations = [] }) => {
 
   // --- DATA LOADING ---
   useEffect(() => {
+    const fetchWithRetry = async (url: string, retries = 2): Promise<any> => {
+        try {
+            const response = await fetch(url);
+            if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+            return await response.json();
+        } catch (error) {
+            if (retries > 0) {
+                console.warn(`Fetch failed for ${url}, retrying... (${retries} left)`);
+                await new Promise(resolve => setTimeout(resolve, 1500));
+                return fetchWithRetry(url, retries - 1);
+            }
+            throw error;
+        }
+    };
+
     const loadGeoData = async () => {
         try {
             setLoadingText("Downloading Global Vector Data...");
-            const worldRes = await fetch('https://raw.githubusercontent.com/tower1229/echarts-world-map-jeojson/refs/heads/master/worldZH.json');
-            const worldJson = await worldRes.json();
+            // Use standard raw GitHub URL for better stability
+            const worldJson = await fetchWithRetry('https://raw.githubusercontent.com/tower1229/echarts-world-map-jeojson/master/worldZH.json');
 
             setLoadingText("Downloading China High-Precision Data...");
-            const chinaRes = await fetch('https://geo.datav.aliyun.com/areas_v3/bound/100000_full.json');
-            const chinaJson = await chinaRes.json();
+            const chinaJson = await fetchWithRetry('https://geo.datav.aliyun.com/areas_v3/bound/100000_full.json');
 
             setLoadingText("Applying Coordinate Correction...");
             
@@ -387,8 +401,10 @@ const WorldMap: React.FC<WorldMapProps> = ({ locations = [] }) => {
             
             setIsLoading(false);
         } catch (error) {
-            console.error(error);
-            setLoadingText("Error Loading Data");
+            console.error("Failed to load map data after retries:", error);
+            // Graceful degradation: Stop loading so user can at least see the globe and markers
+            setLoadingText("Vector data unavailable. Switching to Satellite Mode.");
+            setTimeout(() => setIsLoading(false), 1500);
         }
     };
 
