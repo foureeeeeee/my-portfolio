@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState, useMemo } from 'react';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ArrowLeft, MapPin, Calendar, Maximize2, X, Navigation, ZoomIn } from 'lucide-react';
+import { ArrowLeft, MapPin, Calendar, Maximize2, X, Navigation, ZoomIn, ChevronLeft, ChevronRight } from 'lucide-react';
 import { TravelLocation } from '../types';
 
 interface TravelPageProps {
@@ -13,6 +13,7 @@ interface TravelPageProps {
 const TravelPage: React.FC<TravelPageProps> = ({ locations, onBack }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const [selectedLocation, setSelectedLocation] = useState<TravelLocation | null>(null);
+  const [currentImageIndex, setCurrentImageIndex] = useState(0);
   const [lightboxImage, setLightboxImage] = useState<string | null>(null);
   const [isGlobeReady, setIsGlobeReady] = useState(false);
   
@@ -37,6 +38,13 @@ const TravelPage: React.FC<TravelPageProps> = ({ locations, onBack }) => {
     const y = (radius * Math.cos(phi));
     return new THREE.Vector3(x, y, z);
   };
+
+  // Reset image index when location changes
+  useEffect(() => {
+    if (selectedLocation) {
+        setCurrentImageIndex(0);
+    }
+  }, [selectedLocation]);
 
   useEffect(() => {
     if (!containerRef.current) return;
@@ -150,7 +158,6 @@ const TravelPage: React.FC<TravelPageProps> = ({ locations, onBack }) => {
     scene.add(atmosphere);
 
     // 4. Aurora Borealis Effect
-    // Simulated using a distorted ring/cylinder geometry with a custom shader
     const auroraGeo = new THREE.CylinderGeometry(16, 16, 6, 64, 8, true);
     // Displace vertices to make it wavy
     const pos = auroraGeo.attributes.position;
@@ -364,7 +371,7 @@ const TravelPage: React.FC<TravelPageProps> = ({ locations, onBack }) => {
     };
   }, [locations, isGlobeReady]);
 
-  // --- INTERACTION ---
+  // --- INTERACTION HANDLERS ---
   const handleLocationClick = (loc: TravelLocation) => {
     setSelectedLocation(loc);
     if (controlsRef.current && cameraRef.current) {
@@ -391,6 +398,17 @@ const TravelPage: React.FC<TravelPageProps> = ({ locations, onBack }) => {
         };
         animateCam();
     }
+  };
+
+  const paginate = (newDirection: number) => {
+    if (!selectedLocation) return;
+    const len = selectedLocation.images.length;
+    setCurrentImageIndex((prev) => (prev + newDirection + len) % len);
+  };
+
+  const swipeConfidenceThreshold = 10000;
+  const swipePower = (offset: number, velocity: number) => {
+    return Math.abs(offset) * velocity;
   };
 
   return (
@@ -473,28 +491,74 @@ const TravelPage: React.FC<TravelPageProps> = ({ locations, onBack }) => {
                                 <div className="absolute bottom-0 left-0 w-8 h-8 border-b border-l border-white/20 rounded-bl-2xl"></div>
                                 
                                 {/* Image Carousel (Main) */}
-                                <div 
-                                    className="relative aspect-video bg-gray-900 group cursor-zoom-in"
-                                    onClick={() => setLightboxImage(selectedLocation.images[0])}
-                                >
-                                    <img 
-                                        src={selectedLocation.images[0]} 
-                                        alt={selectedLocation.name}
-                                        className="w-full h-full object-cover opacity-80 group-hover:opacity-100 transition-opacity duration-500"
-                                    />
-                                    <div className="absolute inset-0 bg-gradient-to-t from-black via-transparent to-transparent"></div>
+                                <div className="relative aspect-video bg-gray-900 group cursor-grab active:cursor-grabbing overflow-hidden">
+                                    <AnimatePresence initial={false} mode="wait">
+                                        <motion.img 
+                                            key={currentImageIndex}
+                                            src={selectedLocation.images[currentImageIndex]} 
+                                            alt={selectedLocation.name}
+                                            className="w-full h-full object-cover"
+                                            initial={{ opacity: 0, x: 100 }}
+                                            animate={{ opacity: 1, x: 0 }}
+                                            exit={{ opacity: 0, x: -100 }}
+                                            transition={{
+                                                x: { type: "spring", stiffness: 300, damping: 30 },
+                                                opacity: { duration: 0.2 }
+                                            }}
+                                            drag="x"
+                                            dragConstraints={{ left: 0, right: 0 }}
+                                            dragElastic={1}
+                                            onDragEnd={(e, { offset, velocity }) => {
+                                                const swipe = swipePower(offset.x, velocity.x);
+                                                if (swipe < -swipeConfidenceThreshold) {
+                                                    paginate(1);
+                                                } else if (swipe > swipeConfidenceThreshold) {
+                                                    paginate(-1);
+                                                }
+                                            }}
+                                            // Handle click manually to distinguish from drag
+                                            onClick={() => setLightboxImage(selectedLocation.images[currentImageIndex])}
+                                        />
+                                    </AnimatePresence>
                                     
-                                    {/* Hover Overlay Icon */}
-                                    <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-                                        <div className="w-12 h-12 bg-black/50 backdrop-blur rounded-full flex items-center justify-center border border-white/20">
-                                            <ZoomIn size={20} className="text-white" />
+                                    {/* Navigation Overlay */}
+                                    <div className="absolute inset-0 flex items-center justify-between p-2 pointer-events-none">
+                                        <button 
+                                            onClick={(e) => { e.stopPropagation(); paginate(-1); }}
+                                            className="pointer-events-auto p-2 bg-black/40 hover:bg-black/80 rounded-full text-white opacity-0 group-hover:opacity-100 transition-opacity backdrop-blur-sm"
+                                        >
+                                            <ChevronLeft size={20} />
+                                        </button>
+                                        <button 
+                                            onClick={(e) => { e.stopPropagation(); paginate(1); }}
+                                            className="pointer-events-auto p-2 bg-black/40 hover:bg-black/80 rounded-full text-white opacity-0 group-hover:opacity-100 transition-opacity backdrop-blur-sm"
+                                        >
+                                            <ChevronRight size={20} />
+                                        </button>
+                                    </div>
+
+                                    {/* Dots Indicator */}
+                                    <div className="absolute bottom-3 left-1/2 -translate-x-1/2 flex gap-1.5 z-20 pointer-events-none">
+                                        {selectedLocation.images.map((_, idx) => (
+                                            <div 
+                                                key={idx} 
+                                                className={`w-1.5 h-1.5 rounded-full transition-all duration-300 ${idx === currentImageIndex ? 'bg-white scale-125' : 'bg-white/40'}`} 
+                                            />
+                                        ))}
+                                    </div>
+
+                                    <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent pointer-events-none"></div>
+
+                                    <div className="absolute top-3 right-3 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-10">
+                                        <div className="bg-black/50 backdrop-blur p-1.5 rounded-lg border border-white/20">
+                                            <ZoomIn size={14} className="text-white" />
                                         </div>
                                     </div>
 
-                                    <div className="absolute bottom-3 left-4">
+                                    <div className="absolute bottom-3 left-4 pointer-events-none z-10">
                                         <p className="text-xs font-mono text-green-400 flex items-center gap-2">
                                             <Navigation size={12} className="rotate-45" />
-                                            TARGET_LOCKED
+                                            {currentImageIndex + 1} / {selectedLocation.images.length}
                                         </p>
                                     </div>
                                 </div>
@@ -509,8 +573,8 @@ const TravelPage: React.FC<TravelPageProps> = ({ locations, onBack }) => {
                                         {selectedLocation.images.map((img, i) => (
                                             <div 
                                                 key={i} 
-                                                className="aspect-square rounded bg-gray-800 overflow-hidden cursor-pointer hover:ring-2 ring-green-500/50 transition-all group relative"
-                                                onClick={() => setLightboxImage(img)}
+                                                className={`aspect-square rounded bg-gray-800 overflow-hidden cursor-pointer hover:ring-2 ring-green-500/50 transition-all group relative ${i === currentImageIndex ? 'ring-2 ring-white/80 opacity-100' : 'opacity-60 hover:opacity-100'}`}
+                                                onClick={() => setCurrentImageIndex(i)}
                                             >
                                                 <img src={img} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" alt="" />
                                             </div>
