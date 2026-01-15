@@ -6,10 +6,11 @@ import Hero from './components/Hero';
 import Marquee from './components/Marquee';
 import ProjectCard from './components/ProjectCard';
 import NoiseOverlay from './components/NoiseOverlay';
+import ParticleBackground from './components/ParticleBackground'; 
 import AdminPortal from './components/AdminPortal';
 import SocialHub from './components/SocialHub';
-import WorldMap from './components/WorldMap'; // Keep for home preview
-import TravelPage from './components/TravelPage'; // New full page
+import WorldMap from './components/WorldMap';
+import TravelPage from './components/TravelPage';
 import ExperienceAvatar from './components/ExperienceAvatar';
 import { getPortfolioData, AppData } from './utils/dataManager';
 import { Github, Linkedin, Mail, Twitter, Lock, Globe } from 'lucide-react';
@@ -38,8 +39,14 @@ const App: React.FC = () => {
         {loading && <MatrixLoader onLoadingComplete={() => setLoading(false)} />}
       </AnimatePresence>
 
-      {/* Global Cursor lifted to root to avoid stacking context issues */}
       {!loading && <CustomCursor />}
+      
+      {/* 
+        Global Background Layer 
+        Moved outside of motion.main to avoid transform stacking context issues.
+        This ensures it remains fixed behind all content.
+      */}
+      {!loading && <ParticleBackground />}
 
       <AnimatePresence>
         {showAdmin && (
@@ -53,7 +60,6 @@ const App: React.FC = () => {
       </AnimatePresence>
 
       <AnimatePresence mode="wait">
-        {/* TRAVEL PAGE VIEW */}
         {view === 'travel' && !loading && (
             <motion.div
                 key="travel-page"
@@ -69,7 +75,6 @@ const App: React.FC = () => {
             </motion.div>
         )}
 
-        {/* HOME VIEW */}
         {view === 'home' && !loading && (
           <motion.main 
             key="home-page"
@@ -77,11 +82,11 @@ const App: React.FC = () => {
             animate={{ opacity: 1, scale: 1, filter: "blur(0px)" }}
             exit={{ opacity: 0, scale: 0.95, filter: "blur(5px)" }}
             transition={{ duration: 1.2, ease: [0.22, 1, 0.36, 1] }}
-            className="bg-[#050505] min-h-screen text-white selection:bg-purple-500/30 selection:text-purple-200 overflow-x-hidden"
+            // Removed bg-[#050505] so transparency allows ParticleBackground to show through
+            className="min-h-screen text-white selection:bg-purple-500/30 selection:text-purple-200 overflow-x-hidden relative z-10"
           >
             <NoiseOverlay />
             
-            {/* Navbar */}
             <nav className="fixed top-0 left-0 w-full p-6 md:p-8 flex justify-between items-center z-40 mix-blend-difference">
                <div className="text-xl font-bold tracking-tighter">ZU.</div>
                <div className="hidden md:flex gap-8 text-sm font-medium tracking-wide">
@@ -104,7 +109,6 @@ const App: React.FC = () => {
             
             <Marquee />
             
-            {/* Selected Works Section */}
             <section id="works" className="py-24 px-6 md:px-12 max-w-7xl mx-auto relative z-10">
               <div className="flex items-center gap-4 mb-24">
                  <div className="w-2 h-2 bg-purple-500 rounded-full"></div>
@@ -118,7 +122,7 @@ const App: React.FC = () => {
               </div>
             </section>
 
-            {/* Experience Section */}
+            {/* Experience has its own background to keep text legible */}
             <section id="experience" className="py-24 px-6 md:px-12 bg-[#0a0a0a] relative z-10">
                <div className="max-w-7xl mx-auto">
                   <div className="flex items-center gap-4 mb-20">
@@ -127,7 +131,6 @@ const App: React.FC = () => {
                   </div>
 
                   <div className="grid grid-cols-1 lg:grid-cols-12 gap-16 items-start">
-                     {/* Left Column: Interactive Avatar */}
                      <div className="lg:col-span-5 sticky top-32 z-20">
                         <ExperienceAvatar />
                         <div className="mt-8 text-xs text-gray-600 font-mono hidden lg:block">
@@ -136,7 +139,6 @@ const App: React.FC = () => {
                         </div>
                      </div>
 
-                     {/* Right Column: Experience List */}
                      <div className="lg:col-span-7 flex flex-col gap-12">
                        {portfolioData.experience.map((exp, i) => (
                           <motion.div 
@@ -164,19 +166,16 @@ const App: React.FC = () => {
                </div>
             </section>
 
-            {/* World Map Teaser Section - Now Interactive */}
             <section className="relative h-[80vh] overflow-hidden flex flex-col items-center justify-center bg-black border-y border-white/10 group">
                 <div className="absolute inset-0 z-0 opacity-70 transition-opacity duration-700">
                     <WorldMap locations={portfolioData.travels} />
                 </div>
-                {/* Overlay that fades out on hover to encourage interaction */}
                 <div className="relative z-10 text-center pointer-events-none opacity-100 group-hover:opacity-0 transition-opacity duration-500">
                     <h2 className="text-4xl md:text-6xl font-bold mb-6 drop-shadow-2xl">GLOBAL FOOTPRINT</h2>
                     <div className="px-8 py-3 bg-white/10 backdrop-blur-md text-white font-medium rounded-full flex items-center gap-2 mx-auto border border-white/20">
                          <Globe size={18} /> EXPLORE MAP
                     </div>
                 </div>
-                {/* Dedicated full screen button at bottom */}
                 <div className="absolute bottom-8 left-1/2 -translate-x-1/2 z-20 pointer-events-auto">
                     <button 
                         onClick={() => setView('travel')}
@@ -187,7 +186,6 @@ const App: React.FC = () => {
                 </div>
             </section>
 
-            {/* Honors & Awards */}
             <section id="honors" className="py-24 px-6 md:px-12 max-w-7xl mx-auto relative z-10">
                <div className="flex items-center gap-4 mb-20">
                    <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
@@ -214,7 +212,6 @@ const App: React.FC = () => {
                </div>
             </section>
 
-            {/* Skills */}
             <section id="skills" className="py-24 px-6 md:px-12 bg-gradient-to-b from-black to-[#080808] relative z-10">
                <div className="max-w-7xl mx-auto text-center">
                   <h2 className="text-4xl md:text-6xl font-bold mb-16 tracking-tight">Expertise</h2>
@@ -232,10 +229,8 @@ const App: React.FC = () => {
                </div>
             </section>
 
-            {/* Social Hub (Connect Section) */}
             <SocialHub />
 
-            {/* Minimal Footer */}
             <footer className="py-8 border-t border-white/5 bg-black text-center relative z-20">
                <div className="flex flex-col items-center gap-4">
                    <p className="text-gray-600 text-xs tracking-widest uppercase">© 2024 Zu Kaiquan. All Rights Reserved.</p>

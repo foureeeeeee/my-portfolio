@@ -16,7 +16,7 @@ const ParticleBackground: React.FC = () => {
     canvas.height = height;
 
     const particles: Particle[] = [];
-    const particleCount = 100;
+    const particleCount = 120; 
 
     let mouse = { x: -1000, y: -1000 };
     let lastScrollY = window.scrollY;
@@ -28,15 +28,17 @@ const ParticleBackground: React.FC = () => {
       size: number;
       vx: number;
       vy: number;
+      baseVy: number; // Store original vertical speed
       color: string;
       alpha: number;
 
       constructor() {
         this.x = Math.random() * width;
         this.y = Math.random() * height;
-        this.size = Math.random() * 2 + 1;
+        this.size = Math.random() * 2 + 1.2;
         this.vx = (Math.random() - 0.5) * 0.5;
-        this.vy = (Math.random() - 0.5) * 0.5;
+        this.baseVy = (Math.random() - 0.5) * 0.5;
+        this.vy = this.baseVy;
         this.alpha = Math.random() * 0.5 + 0.3;
         this.color = '';
         this.updateColor();
@@ -47,12 +49,10 @@ const ParticleBackground: React.FC = () => {
         ctx.fillStyle = this.color;
         ctx.beginPath();
         
-        // Stretch effect based on scroll velocity ("Lamination" / Streak)
-        // If scrolling fast, stretch the particle vertically
-        const stretch = Math.max(1, Math.min(Math.abs(scrollVelocity) * 1.5, 40));
+        // Stretch effect (Lamination)
+        const stretch = Math.max(1, Math.min(Math.abs(scrollVelocity) * 2, 50));
         
         if (stretch > 1.2) {
-             // Draw streak
              ctx.ellipse(this.x, this.y, this.size, this.size * stretch, 0, 0, Math.PI * 2);
         } else {
              ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
@@ -64,7 +64,7 @@ const ParticleBackground: React.FC = () => {
         const p = this.x / width;
         let r, g, b;
 
-        // Gradient: Purple (168, 85, 247) -> Green (34, 197, 94) -> Blue (59, 130, 246)
+        // Gradient: Purple -> Green -> Blue
         if (p <= 0.5) {
             const t = p * 2; 
             r = 168 + (34 - 168) * t;
@@ -97,14 +97,31 @@ const ParticleBackground: React.FC = () => {
           this.vy -= forceDirectionY * force * strength * 0.1;
         }
 
-        // Apply Scroll Force ("Drawing Down" effect)
-        // Move particles vertically based on scroll velocity to create the "flow"
-        this.y += this.vy + (scrollVelocity * 0.5); 
+        // --- DISSIPATION LOGIC ---
+        // As we scroll past the hero (e.g. > 100px), start accelerating particles downwards
+        // to simulate them flowing/dissipating into the marquee.
+        const scrollProgress = Math.min(window.scrollY / height, 2); // 0 to 2
+        
+        // Base scroll force (Drawing Down)
+        let scrollForce = scrollVelocity * 0.8;
+        
+        // Dissipation force: If we are scrolling down into Marquee (approx > 0.3 progress),
+        // add extra downward pull and scatter to "dissipate" them.
+        if (scrollProgress > 0.3) {
+             // The further down we scroll, the faster they fall/scatter
+             this.vy += 0.2 * scrollProgress; 
+             this.vx += (Math.random() - 0.5) * 0.1 * scrollProgress; // Scatter horizontally
+        } else {
+             // Return to normal-ish floating when near top
+             this.vy = this.baseVy + (this.vy - this.baseVy) * 0.95;
+        }
+
+        this.y += this.vy + scrollForce; 
         this.x += this.vx;
 
-        // Friction
+        // Friction for horizontal
         const speed = Math.sqrt(this.vx * this.vx + this.vy * this.vy);
-        const maxSpeed = 3;
+        const maxSpeed = 3 + (scrollProgress * 5); // Allow higher speeds when dissipating
         if (speed > maxSpeed) {
             this.vx = (this.vx / speed) * maxSpeed;
             this.vy = (this.vy / speed) * maxSpeed;
@@ -128,16 +145,38 @@ const ParticleBackground: React.FC = () => {
     let animationFrameId: number;
 
     const animate = () => {
-      // Trail effect: instead of clearing completely, draw a semi-transparent black rect
-      // When scrolling fast, use lower alpha to create longer, smoother trails ("lamination")
+      // Visibility Logic: "Not full time particle effect"
+      // Visible in Hero (0 to 1vh) and Marquee (1vh to ~1.8vh)
+      // Fade out completely after 1.8vh
+      const scrollY = window.scrollY;
+      const fadeStart = height * 1.5; 
+      const fadeEnd = height * 2.2;
+      
+      let containerOpacity = 1;
+      if (scrollY > fadeStart) {
+          containerOpacity = 1 - (scrollY - fadeStart) / (fadeEnd - fadeStart);
+          if (containerOpacity < 0) containerOpacity = 0;
+      }
+      
+      // Update canvas opacity
+      if (canvas) {
+          canvas.style.opacity = containerOpacity.toString();
+          // Optimisation: Stop drawing if invisible
+          if (containerOpacity <= 0) {
+              animationFrameId = requestAnimationFrame(animate);
+              return;
+          }
+      }
+
+      // Trail effect logic
       const baseAlpha = 0.2;
-      const velocityFactor = Math.min(Math.abs(scrollVelocity) * 0.01, 0.15); // max 0.15 reduction
-      const currentAlpha = Math.max(0.05, baseAlpha - velocityFactor);
+      const velocityFactor = Math.min(Math.abs(scrollVelocity) * 0.01, 0.18); 
+      const currentAlpha = Math.max(0.02, baseAlpha - velocityFactor);
       
       ctx.fillStyle = `rgba(5, 5, 5, ${currentAlpha})`; 
       ctx.fillRect(0, 0, width, height);
       
-      // Decay scroll velocity (Inertia)
+      // Decay scroll velocity
       scrollVelocity *= 0.92;
       if (Math.abs(scrollVelocity) < 0.1) scrollVelocity = 0;
       
@@ -165,7 +204,6 @@ const ParticleBackground: React.FC = () => {
     
     const handleScroll = () => {
         const currentY = window.scrollY;
-        // Calculate velocity (difference in scroll position)
         scrollVelocity = currentY - lastScrollY;
         lastScrollY = currentY;
     };
@@ -185,7 +223,7 @@ const ParticleBackground: React.FC = () => {
   return (
     <canvas 
       ref={canvasRef} 
-      className="absolute inset-0 pointer-events-none z-0"
+      className="fixed inset-0 pointer-events-none z-0 transition-opacity duration-300"
       style={{ mixBlendMode: 'screen' }}
     />
   );

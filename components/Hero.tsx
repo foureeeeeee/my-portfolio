@@ -1,117 +1,5 @@
 import React, { useRef, useEffect } from 'react';
 import { motion, useScroll, useTransform, useSpring, useMotionValue, Variants } from 'framer-motion';
-import ParticleBackground from './ParticleBackground';
-
-const PortfolioParticles: React.FC = () => {
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-
-  useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
-
-    let animationFrameId: number;
-    let particles: Array<{x: number, y: number, vx: number, vy: number, size: number, color: string, alpha: number}> = [];
-    let mouse = { x: -1000, y: -1000 };
-
-    const resize = () => {
-      canvas.width = canvas.offsetWidth;
-      canvas.height = canvas.offsetHeight;
-      initParticles();
-    };
-
-    const colors = ['#a855f7', '#22c55e', '#3b82f6']; 
-
-    const initParticles = () => {
-      particles = [];
-      const count = 40; 
-      for (let i = 0; i < count; i++) {
-        particles.push({
-          x: Math.random() * canvas.width,
-          y: Math.random() * canvas.height,
-          vx: (Math.random() - 0.5) * 0.5,
-          vy: (Math.random() - 0.5) * 0.5,
-          size: Math.random() * 2 + 0.5,
-          color: colors[Math.floor(Math.random() * colors.length)],
-          alpha: Math.random() * 0.6 + 0.2
-        });
-      }
-    };
-
-    const draw = () => {
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
-      
-      const gradient = ctx.createLinearGradient(0, 0, canvas.width, canvas.height);
-      gradient.addColorStop(0, 'rgba(168, 85, 247, 0.08)');
-      gradient.addColorStop(0.5, 'rgba(34, 197, 94, 0.05)');
-      gradient.addColorStop(1, 'rgba(59, 130, 246, 0.08)');
-      
-      ctx.fillStyle = gradient;
-      const radius = 20;
-      ctx.beginPath();
-      ctx.roundRect(0, 0, canvas.width, canvas.height, radius);
-      ctx.fill();
-
-      particles.forEach(p => {
-        const rect = canvas.getBoundingClientRect();
-        const localMouseX = mouse.x - rect.left;
-        const localMouseY = mouse.y - rect.top;
-        
-        const dx = localMouseX - p.x;
-        const dy = localMouseY - p.y;
-        const dist = Math.sqrt(dx * dx + dy * dy);
-        
-        if (dist < 80) {
-            const force = (80 - dist) / 80;
-            p.vx -= (dx / dist) * force * 0.8;
-            p.vy -= (dy / dist) * force * 0.8;
-        }
-
-        p.x += p.vx;
-        p.y += p.vy;
-
-        if (p.x < 0) p.x = canvas.width;
-        if (p.x > canvas.width) p.x = 0;
-        if (p.y < 0) p.y = canvas.height;
-        if (p.y > canvas.height) p.y = 0;
-
-        ctx.beginPath();
-        ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
-        ctx.fillStyle = p.color;
-        ctx.globalAlpha = p.alpha;
-        ctx.fill();
-      });
-      
-      ctx.globalAlpha = 1;
-      animationFrameId = requestAnimationFrame(draw);
-    };
-
-    resize();
-    draw();
-    
-    const handleMouseMove = (e: MouseEvent) => {
-        mouse.x = e.clientX;
-        mouse.y = e.clientY;
-    };
-    
-    window.addEventListener('resize', resize);
-    window.addEventListener('mousemove', handleMouseMove);
-
-    return () => {
-      window.removeEventListener('resize', resize);
-      window.removeEventListener('mousemove', handleMouseMove);
-      cancelAnimationFrame(animationFrameId);
-    };
-  }, []);
-
-  return (
-    <canvas 
-      ref={canvasRef} 
-      className="absolute inset-[-20px] w-[calc(100%+40px)] h-[calc(100%+40px)] pointer-events-none -z-10 blur-sm"
-    />
-  );
-};
 
 const Hero: React.FC = () => {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -130,11 +18,10 @@ const Hero: React.FC = () => {
     offset: ["start start", "end start"]
   });
 
-  // Updated Scroll Transitions for smoother handoff to Marquee
   const y = useTransform(scrollYProgress, [0, 1], [0, 100]);
-  const opacity = useTransform(scrollYProgress, [0.6, 0.95], [1, 0]); // Fades out later
-  const scale = useTransform(scrollYProgress, [0, 1], [1, 0.95]); // Subtle shrink
-  const blur = useTransform(scrollYProgress, [0.6, 1], ["0px", "8px"]); // Blur out
+  const opacity = useTransform(scrollYProgress, [0.6, 0.95], [1, 0]);
+  const scale = useTransform(scrollYProgress, [0, 1], [1, 0.95]);
+  const blur = useTransform(scrollYProgress, [0.6, 1], ["0px", "8px"]);
 
   useEffect(() => {
     const handleMouseMove = (e: MouseEvent) => {
@@ -147,8 +34,6 @@ const Hero: React.FC = () => {
 
   const smoothTransition = { duration: 1.2, ease: [0.22, 1, 0.36, 1] as [number, number, number, number] };
 
-  // --- ANIMATION VARIANTS ---
-  
   const glitchVariants: Variants = {
     hover: {
       opacity: [0, 0.5, 0.2, 0.7, 0],
@@ -194,7 +79,6 @@ const Hero: React.FC = () => {
 
   return (
     <section ref={containerRef} className="relative min-h-screen flex items-center justify-center overflow-hidden px-6 pt-20">
-      <ParticleBackground />
       
       <motion.div 
         className="absolute right-[10%] top-[20%] w-[300px] h-[300px] md:w-[600px] md:h-[600px] rounded-full bg-purple-600/20 blur-[120px] mix-blend-screen"
@@ -243,7 +127,6 @@ const Hero: React.FC = () => {
                     className="text-7xl md:text-[10rem] leading-[0.85] font-bold uppercase relative z-20"
                     variants={mainTextVariants}
                 >
-                  {/* HELLO */}
                   <span className="block overflow-hidden">
                     <motion.div 
                       variants={wordExpansionVariants}
@@ -260,7 +143,6 @@ const Hero: React.FC = () => {
                     </motion.div>
                   </span>
                   
-                  {/* I'M ZU */}
                   <span className="block overflow-hidden">
                     <motion.div 
                       variants={wordExpansionVariants}
@@ -277,7 +159,6 @@ const Hero: React.FC = () => {
                     </motion.div>
                   </span>
 
-                  {/* KAIQUAN (Laminated) */}
                   <span className="block overflow-hidden">
                     <motion.div 
                          initial={{ y: "100%" }}
@@ -285,7 +166,6 @@ const Hero: React.FC = () => {
                          transition={{ ...smoothTransition, delay: 1.2 }}
                          className="block"
                     >
-                        {/* Lamination Gradient Text */}
                         <motion.span 
                             variants={{...wordExpansionVariants, ...laminationVariants}}
                             className="block text-transparent bg-clip-text bg-gradient-to-r from-white via-gray-300 to-gray-600 group-hover:from-green-500 group-hover:via-emerald-200 group-hover:to-green-500 bg-[length:200%_auto]"
@@ -296,7 +176,6 @@ const Hero: React.FC = () => {
                   </span>
                 </motion.h1>
 
-                {/* Glitch Layer 1 (Red) - Behind */}
                 <motion.div 
                     className="absolute inset-0 z-10 text-7xl md:text-[10rem] leading-[0.85] font-bold tracking-tighter uppercase text-red-500 mix-blend-screen pointer-events-none select-none"
                     variants={glitchVariants}
@@ -307,14 +186,13 @@ const Hero: React.FC = () => {
                     <span className="block">Kaiquan</span>
                 </motion.div>
 
-                {/* Glitch Layer 2 (Blue) - Behind */}
                 <motion.div 
                     className="absolute inset-0 z-10 text-7xl md:text-[10rem] leading-[0.85] font-bold tracking-tighter uppercase text-blue-500 mix-blend-screen pointer-events-none select-none"
                     variants={{
                         ...glitchVariants,
                         hover: {
                             ...glitchVariants.hover,
-                            x: [4, -4, 2, -6, 0], // Inverse movement
+                            x: [4, -4, 2, -6, 0], 
                             transition: { repeat: Infinity, duration: 0.25, delay: 0.05 }
                         }
                     }}
@@ -343,7 +221,6 @@ const Hero: React.FC = () => {
         </div>
 
         <div className="md:col-span-4 relative flex flex-col justify-end items-start md:items-end text-right space-y-4">
-            <PortfolioParticles />
             
             <div className="opacity-70 flex flex-col items-start md:items-end w-full">
                <motion.div 
@@ -372,7 +249,6 @@ const Hero: React.FC = () => {
         </div>
       </motion.div>
       
-      {/* Scroll indicator */}
       <motion.div 
         className="absolute bottom-10 left-1/2 -translate-x-1/2 flex flex-col items-center gap-2"
         initial={{ opacity: 0, y: -20 }}
