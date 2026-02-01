@@ -38,3 +38,13 @@ export interface TravelLocation {
   images: string[];
   description?: string;
 }
+
+export interface Hobby {
+  id: number;
+  name: string;
+  category: string; // e.g., "Sport", "Collection", "Art"
+  coverImage: string;
+  description: string;
+  news?: string; // Latest update or news about this hobby
+  gallery: string[]; // Trails/Pictures
+}

@@ -11,15 +11,17 @@ import AdminPortal from './components/AdminPortal';
 import SocialHub from './components/SocialHub';
 import WorldMap from './components/WorldMap';
 import TravelPage from './components/TravelPage';
+import HobbyWorld from './components/HobbyWorld';
+import HobbySection from './components/HobbySection';
 import ExperienceAvatar from './components/ExperienceAvatar';
 import { getPortfolioData, AppData } from './utils/dataManager';
-import { Github, Linkedin, Mail, Twitter, Lock, Globe } from 'lucide-react';
+import { Github, Linkedin, Mail, Twitter, Lock, Globe, Smile } from 'lucide-react';
 
 const App: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [portfolioData, setPortfolioData] = useState<AppData | null>(null);
   const [showAdmin, setShowAdmin] = useState(false);
-  const [view, setView] = useState<'home' | 'travel'>('home');
+  const [view, setView] = useState<'home' | 'travel' | 'hobby'>('home');
 
   useEffect(() => {
     // Load data on mount
@@ -75,6 +77,22 @@ const App: React.FC = () => {
             </motion.div>
         )}
 
+        {view === 'hobby' && !loading && (
+            <motion.div
+                key="hobby-page"
+                initial={{ opacity: 0, scale: 0.9 }}
+                animate={{ opacity: 1, scale: 1 }}
+                exit={{ opacity: 0, scale: 1.1 }}
+                transition={{ duration: 0.8 }}
+                className="relative z-50"
+            >
+                <HobbyWorld 
+                    hobbies={portfolioData.hobbies} 
+                    onBack={() => setView('home')} 
+                />
+            </motion.div>
+        )}
+
         {view === 'home' && !loading && (
           <motion.main 
             key="home-page"
@@ -89,11 +107,14 @@ const App: React.FC = () => {
             
             <nav className="fixed top-0 left-0 w-full p-6 md:p-8 flex justify-between items-center z-40 mix-blend-difference">
                <div className="text-xl font-bold tracking-tighter">ZU.</div>
-               <div className="hidden md:flex gap-8 text-sm font-medium tracking-wide">
+               <div className="hidden md:flex gap-8 text-sm font-medium tracking-wide items-center">
                   <a href="#works" className="hover:opacity-50 transition-opacity">WORKS</a>
                   <a href="#experience" className="hover:opacity-50 transition-opacity">EXPERIENCE</a>
                   <button onClick={() => setView('travel')} className="hover:opacity-50 transition-opacity flex items-center gap-1">
                       TRAVEL <Globe size={12} />
+                  </button>
+                  <button onClick={() => setView('hobby')} className="hover:opacity-50 transition-opacity flex items-center gap-1">
+                      HOBBIES <Smile size={12} />
                   </button>
                   <a href="#honors" className="hover:opacity-50 transition-opacity">HONORS</a>
                   <a href="#skills" className="hover:opacity-50 transition-opacity">SKILLS</a>
@@ -229,6 +250,10 @@ const App: React.FC = () => {
                </div>
             </section>
 
+            {/* Separated Hobby Section */}
+            <HobbySection onEnter={() => setView('hobby')} />
+
+            {/* Social Hub (Purely links now) */}
             <SocialHub />
 
             <footer className="py-8 border-t border-white/5 bg-black text-center relative z-20">

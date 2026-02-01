@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, Plus, Trash2, Save, RotateCcw, Lock, Search, Image as ImageIcon, Loader2, Globe, Download, Check, Copy } from 'lucide-react';
+import { X, Plus, Trash2, Save, RotateCcw, Lock, Search, Image as ImageIcon, Loader2, Globe, Download, Check, Copy, FileCode, Smile } from 'lucide-react';
 import { AppData, savePortfolioData, resetPortfolioData } from '../utils/dataManager';
-import { Project, Experience, Award, TravelLocation } from '../types';
+import { Project, Experience, Award, TravelLocation, Hobby } from '../types';
 
 interface AdminPortalProps {
   isOpen: boolean;
@@ -14,14 +14,15 @@ interface AdminPortalProps {
 const AdminPortal: React.FC<AdminPortalProps> = ({ isOpen, onClose, data, onUpdate }) => {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [password, setPassword] = useState('');
-  const [activeTab, setActiveTab] = useState<'projects' | 'experience' | 'awards' | 'travels'>('projects');
+  const [activeTab, setActiveTab] = useState<'projects' | 'experience' | 'awards' | 'travels' | 'hobbies'>('projects');
   
   // Initialize with empty structure to satisfy type checker before useEffect runs
   const [localData, setLocalData] = useState<AppData>({
       projects: [],
       experience: [],
       awards: [],
-      travels: []
+      travels: [],
+      hobbies: []
   });
   
   const [error, setError] = useState('');
@@ -79,8 +80,88 @@ const AdminPortal: React.FC<AdminPortalProps> = ({ isOpen, onClose, data, onUpda
       setCopySuccess(false);
   };
 
+  // GENERATE THE FULL TYPESCRIPT FILE CONTENT
+  const generateSourceCode = () => {
+    return `import { Project, Experience, Award, TravelLocation, Hobby } from '../types';
+
+export interface AppData {
+  projects: Project[];
+  experience: Experience[];
+  awards: Award[];
+  travels: TravelLocation[];
+  hobbies: Hobby[];
+}
+
+const DEFAULT_PROJECTS: Project[] = ${JSON.stringify(localData.projects, null, 2)};
+
+const DEFAULT_EXPERIENCE: Experience[] = ${JSON.stringify(localData.experience, null, 2)};
+
+const DEFAULT_AWARDS: Award[] = ${JSON.stringify(localData.awards, null, 2)};
+
+const DEFAULT_TRAVELS: TravelLocation[] = ${JSON.stringify(localData.travels, null, 2)};
+
+const DEFAULT_HOBBIES: Hobby[] = ${JSON.stringify(localData.hobbies, null, 2)};
+
+const STORAGE_KEY = 'zu_portfolio_data_v1';
+
+// Default State in Code
+const DEFAULT_DATA: AppData = {
+    projects: DEFAULT_PROJECTS,
+    experience: DEFAULT_EXPERIENCE,
+    awards: DEFAULT_AWARDS,
+    travels: DEFAULT_TRAVELS,
+    hobbies: DEFAULT_HOBBIES
+};
+
+export const getPortfolioData = (): AppData => {
+  try {
+    const stored = localStorage.getItem(STORAGE_KEY);
+    if (stored) {
+      const data = JSON.parse(stored);
+      
+      // Robust Check: Ensure all sections exist, if not merge with defaults
+      return {
+          projects: data.projects || DEFAULT_DATA.projects,
+          experience: data.experience || DEFAULT_DATA.experience,
+          awards: data.awards || DEFAULT_DATA.awards,
+          travels: data.travels || DEFAULT_DATA.travels,
+          hobbies: data.hobbies || DEFAULT_DATA.hobbies
+      };
+    }
+  } catch (e) {
+    console.error("Failed to load portfolio data", e);
+  }
+  // Return a copy to avoid mutation reference issues
+  return JSON.parse(JSON.stringify(DEFAULT_DATA));
+};
+
+export const savePortfolioData = (data: AppData) => {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+    console.log("Data saved to Local Storage:", STORAGE_KEY);
+  } catch (e) {
+    console.error("Failed to save portfolio data", e);
+    throw e;
+  }
+};
+
+export const resetPortfolioData = () => {
+  try {
+    localStorage.removeItem(STORAGE_KEY);
+    console.log("Local Storage cleared. Reverting to code defaults.");
+    // Return a fresh copy of defaults
+    return JSON.parse(JSON.stringify(DEFAULT_DATA));
+  } catch (e) {
+    console.error("Failed to reset data", e);
+    return DEFAULT_DATA;
+  }
+};
+`;
+  };
+
   const copyToClipboard = () => {
-      navigator.clipboard.writeText(JSON.stringify(localData, null, 2));
+      const code = generateSourceCode();
+      navigator.clipboard.writeText(code);
       setCopySuccess(true);
       setTimeout(() => setCopySuccess(false), 2000);
   };
@@ -99,7 +180,7 @@ const AdminPortal: React.FC<AdminPortalProps> = ({ isOpen, onClose, data, onUpda
     }));
   };
 
-  // --- TRAVEL SPECIFIC HANDLERS ---
+  // --- TRAVEL & HOBBY SPECIFIC HANDLERS ---
 
   const handleAutoLocate = async (id: number, query: string) => {
       if (!query) return;
@@ -133,34 +214,38 @@ const AdminPortal: React.FC<AdminPortalProps> = ({ isOpen, onClose, data, onUpda
       }
   };
 
-  const handleImageArrayChange = (id: number, index: number, value: string) => {
+  const handleImageArrayChange = (section: 'travels' | 'hobbies', id: number, index: number, value: string) => {
       setLocalData(prev => ({
           ...prev,
-          travels: prev.travels.map(item => {
+          [section]: prev[section].map((item: any) => {
               if (item.id !== id) return item;
-              const newImages = [...item.images];
+              // For Hobbies, the array is called 'gallery', for Travels it is 'images'
+              const key = section === 'hobbies' ? 'gallery' : 'images';
+              const newImages = [...item[key]];
               newImages[index] = value;
-              return { ...item, images: newImages };
+              return { ...item, [key]: newImages };
           })
       }));
   };
 
-  const addImageField = (id: number) => {
+  const addImageField = (section: 'travels' | 'hobbies', id: number) => {
       setLocalData(prev => ({
           ...prev,
-          travels: prev.travels.map(item => 
-              item.id === id ? { ...item, images: [...item.images, ''] } : item
-          )
+          [section]: prev[section].map((item: any) => {
+              const key = section === 'hobbies' ? 'gallery' : 'images';
+              return item.id === id ? { ...item, [key]: [...item[key], ''] } : item;
+          })
       }));
   };
 
-  const removeImageField = (id: number, index: number) => {
+  const removeImageField = (section: 'travels' | 'hobbies', id: number, index: number) => {
       setLocalData(prev => ({
           ...prev,
-          travels: prev.travels.map(item => {
+          [section]: prev[section].map((item: any) => {
               if (item.id !== id) return item;
-              const newImages = item.images.filter((_, i) => i !== index);
-              return { ...item, images: newImages };
+              const key = section === 'hobbies' ? 'gallery' : 'images';
+              const newImages = item[key].filter((_: any, i: number) => i !== index);
+              return { ...item, [key]: newImages };
           })
       }));
   };
@@ -177,7 +262,7 @@ const AdminPortal: React.FC<AdminPortalProps> = ({ isOpen, onClose, data, onUpda
       newItem = { id: newId, role: 'New Role', company: 'Company', period: '2024', description: 'Description...' } as Experience;
     } else if (section === 'awards') {
       newItem = { id: newId, title: 'Award Title', rank: 'Winner', year: '2024' } as Award;
-    } else {
+    } else if (section === 'travels') {
       newItem = { 
           id: newId, 
           name: 'New Location', 
@@ -189,6 +274,16 @@ const AdminPortal: React.FC<AdminPortalProps> = ({ isOpen, onClose, data, onUpda
           images: ['https://picsum.photos/800/600'],
           description: "New travel entry."
         } as TravelLocation;
+    } else if (section === 'hobbies') {
+        newItem = {
+            id: newId,
+            name: "New Hobby",
+            category: "General",
+            coverImage: "https://picsum.photos/200",
+            description: "Describe your hobby...",
+            news: "",
+            gallery: []
+        } as Hobby;
     }
 
     setLocalData(prev => ({
@@ -274,8 +369,12 @@ const AdminPortal: React.FC<AdminPortalProps> = ({ isOpen, onClose, data, onUpda
              <div className="flex-1 p-8 overflow-hidden flex flex-col">
                 <div className="flex justify-between items-center mb-6">
                     <div>
-                        <h3 className="text-2xl font-bold mb-1">Export Configuration</h3>
-                        <p className="text-gray-400 text-sm">Copy this JSON and update <code className="bg-white/10 px-1 rounded text-green-400">utils/dataManager.ts</code> to make changes permanent in your codebase.</p>
+                        <h3 className="text-2xl font-bold mb-1">Permanent Update Code</h3>
+                        <p className="text-gray-400 text-sm">
+                            1. Copy this code. <br/>
+                            2. Open <code className="bg-white/10 px-1 rounded text-green-400">utils/dataManager.ts</code> in your editor. <br/>
+                            3. Select ALL and PASTE to replace the entire file content.
+                        </p>
                     </div>
                     <button onClick={() => setShowExport(false)} className="text-gray-400 hover:text-white">
                         <X size={24} />
@@ -285,14 +384,14 @@ const AdminPortal: React.FC<AdminPortalProps> = ({ isOpen, onClose, data, onUpda
                     <textarea 
                         readOnly 
                         className="w-full h-full bg-transparent text-xs font-mono text-gray-300 focus:outline-none resize-none"
-                        value={JSON.stringify(localData, null, 2)}
+                        value={generateSourceCode()}
                     />
                     <button 
                         onClick={copyToClipboard}
-                        className="absolute top-4 right-4 flex items-center gap-2 px-4 py-2 bg-white text-black rounded font-medium hover:bg-gray-200 transition-colors shadow-lg"
+                        className="absolute top-4 right-4 flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded font-medium hover:bg-green-700 transition-colors shadow-lg shadow-green-900/20"
                     >
                         {copySuccess ? <Check size={16} /> : <Copy size={16} />}
-                        {copySuccess ? "Copied!" : "Copy JSON"}
+                        {copySuccess ? "Copied!" : "Copy Code"}
                     </button>
                 </div>
              </div>
@@ -301,7 +400,7 @@ const AdminPortal: React.FC<AdminPortalProps> = ({ isOpen, onClose, data, onUpda
             {/* Sidebar */}
             <div className="w-64 border-r border-white/10 bg-black/20 p-6 flex flex-col gap-2 shrink-0">
               <div className="text-xs font-mono text-gray-500 mb-4 uppercase tracking-wider">Collections</div>
-              {(['projects', 'experience', 'awards', 'travels'] as const).map(tab => (
+              {(['projects', 'experience', 'awards', 'travels', 'hobbies'] as const).map(tab => (
                 <button
                   key={tab}
                   onClick={() => setActiveTab(tab)}
@@ -315,14 +414,16 @@ const AdminPortal: React.FC<AdminPortalProps> = ({ isOpen, onClose, data, onUpda
                 <button 
                   onClick={handleSave}
                   className="flex items-center justify-center gap-2 bg-green-600/20 text-green-400 border border-green-600/30 py-2 rounded hover:bg-green-600/30 transition-all"
+                  title="Saves to browser storage (Temporary)"
                 >
-                  <Save size={16} /> Save Changes
+                  <Save size={16} /> Save Local
                 </button>
                 <button 
                   onClick={handleExport}
-                  className="flex items-center justify-center gap-2 bg-blue-600/20 text-blue-400 border border-blue-600/30 py-2 rounded hover:bg-blue-600/30 transition-all text-sm"
+                  className="flex items-center justify-center gap-2 bg-blue-600 text-white border border-blue-500 py-2 rounded hover:bg-blue-500 transition-all text-sm font-bold shadow-[0_0_15px_rgba(37,99,235,0.3)]"
+                  title="Generate code to permanently update dataManager.ts"
                 >
-                   <Download size={16} /> Export JSON
+                   <FileCode size={16} /> Update Codebase
                 </button>
                 <button 
                   onClick={handleReset}
@@ -472,6 +573,84 @@ const AdminPortal: React.FC<AdminPortalProps> = ({ isOpen, onClose, data, onUpda
                           </>
                         )}
 
+                         {/* --- HOBBIES --- */}
+                         {activeTab === 'hobbies' && (
+                          <>
+                            <div className="col-span-2 md:col-span-1">
+                              <label className="text-xs text-gray-500 block mb-1">Hobby Name</label>
+                              <input 
+                                value={item.name} 
+                                onChange={(e) => handleInputChange('hobbies', item.id, 'name', e.target.value)}
+                                className="w-full bg-black/20 border border-white/10 rounded px-3 py-2 text-sm focus:border-purple-500 focus:outline-none"
+                              />
+                            </div>
+                            <div className="col-span-2 md:col-span-1">
+                              <label className="text-xs text-gray-500 block mb-1">Category</label>
+                              <input 
+                                value={item.category} 
+                                onChange={(e) => handleInputChange('hobbies', item.id, 'category', e.target.value)}
+                                className="w-full bg-black/20 border border-white/10 rounded px-3 py-2 text-sm focus:border-purple-500 focus:outline-none"
+                              />
+                            </div>
+                            <div className="col-span-2">
+                                <label className="text-xs text-gray-500 block mb-1">Cover Image (Bubble)</label>
+                                <input 
+                                  value={item.coverImage} 
+                                  onChange={(e) => handleInputChange('hobbies', item.id, 'coverImage', e.target.value)}
+                                  className="w-full bg-black/20 border border-white/10 rounded px-3 py-2 text-sm focus:border-purple-500 focus:outline-none font-mono text-xs text-gray-400"
+                                />
+                            </div>
+                            <div className="col-span-2">
+                                <label className="text-xs text-gray-500 block mb-1">Latest News/Update</label>
+                                <input 
+                                  value={item.news || ''} 
+                                  onChange={(e) => handleInputChange('hobbies', item.id, 'news', e.target.value)}
+                                  placeholder="What's new?"
+                                  className="w-full bg-black/20 border border-white/10 rounded px-3 py-2 text-sm focus:border-purple-500 focus:outline-none"
+                                />
+                            </div>
+                            <div className="col-span-2">
+                              <label className="text-xs text-gray-500 block mb-1">Description</label>
+                              <textarea 
+                                value={item.description} 
+                                onChange={(e) => handleInputChange('hobbies', item.id, 'description', e.target.value)}
+                                className="w-full bg-black/20 border border-white/10 rounded px-3 py-2 text-sm focus:border-purple-500 focus:outline-none h-20 resize-none"
+                              />
+                            </div>
+
+                            <div className="col-span-2">
+                                <label className="text-xs text-gray-500 block mb-2">Trail Gallery (Visuals)</label>
+                                <div className="space-y-2">
+                                    {item.gallery.map((img: string, index: number) => (
+                                        <div key={index} className="flex gap-2 items-center">
+                                            <div className="w-8 h-8 bg-gray-800 rounded overflow-hidden shrink-0 border border-white/10">
+                                                {img ? <img src={img} className="w-full h-full object-cover" alt="preview" onError={(e) => (e.currentTarget.src = 'https://via.placeholder.com/40?text=Err')} /> : <ImageIcon size={14} className="m-2 text-gray-600"/>}
+                                            </div>
+                                            <input 
+                                                value={img}
+                                                onChange={(e) => handleImageArrayChange('hobbies', item.id, index, e.target.value)}
+                                                placeholder="https://..."
+                                                className="flex-1 bg-black/20 border border-white/10 rounded px-3 py-2 text-xs font-mono focus:border-purple-500 focus:outline-none"
+                                            />
+                                            <button 
+                                                onClick={() => removeImageField('hobbies', item.id, index)}
+                                                className="p-2 hover:bg-red-500/20 hover:text-red-400 rounded text-gray-500 transition-colors"
+                                            >
+                                                <X size={14} />
+                                            </button>
+                                        </div>
+                                    ))}
+                                    <button 
+                                        onClick={() => addImageField('hobbies', item.id)}
+                                        className="text-xs text-purple-400 hover:text-purple-300 flex items-center gap-1 mt-2"
+                                    >
+                                        <Plus size={12} /> Add Gallery Image
+                                    </button>
+                                </div>
+                            </div>
+                          </>
+                        )}
+
                         {/* --- TRAVELS --- */}
                         {activeTab === 'travels' && (
                            <>
@@ -559,12 +738,12 @@ const AdminPortal: React.FC<AdminPortalProps> = ({ isOpen, onClose, data, onUpda
                                             </div>
                                             <input 
                                                 value={img}
-                                                onChange={(e) => handleImageArrayChange(item.id, index, e.target.value)}
+                                                onChange={(e) => handleImageArrayChange('travels', item.id, index, e.target.value)}
                                                 placeholder="https://..."
                                                 className="flex-1 bg-black/20 border border-white/10 rounded px-3 py-2 text-xs font-mono focus:border-purple-500 focus:outline-none"
                                             />
                                             <button 
-                                                onClick={() => removeImageField(item.id, index)}
+                                                onClick={() => removeImageField('travels', item.id, index)}
                                                 className="p-2 hover:bg-red-500/20 hover:text-red-400 rounded text-gray-500 transition-colors"
                                                 title="Remove Image"
                                             >
@@ -573,7 +752,7 @@ const AdminPortal: React.FC<AdminPortalProps> = ({ isOpen, onClose, data, onUpda
                                         </div>
                                     ))}
                                     <button 
-                                        onClick={() => addImageField(item.id)}
+                                        onClick={() => addImageField('travels', item.id)}
                                         className="text-xs text-purple-400 hover:text-purple-300 flex items-center gap-1 mt-2"
                                     >
                                         <Plus size={12} /> Add Image URL

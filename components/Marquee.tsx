@@ -32,7 +32,9 @@ const Marquee: React.FC = () => {
     // Mouse state for interaction
     let mouse = { x: -1000, y: -1000 };
     let smoothMouse = { x: -1000, y: -1000 };
-    let currentVelocity = 0; // Smoothed velocity for rendering
+    let currentVelocity = 0; // Smoothed scroll velocity
+    let mouseVelocity = 0;   // Track mouse speed for intensity
+    let hoverStrength = 0;   // Smooth hover transition
 
     // Offscreen buffers
     const buffer1 = document.createElement('canvas');
@@ -107,9 +109,10 @@ const Marquee: React.FC = () => {
         buffer: HTMLCanvasElement, 
         yPos: number, 
         speed: number, 
-        waveAmp: number, 
+        baseWaveAmp: number, 
         waveFreq: number,
-        distortionStrength: number
+        distortionStrength: number, // Scroll-based distortion
+        mouseInteraction: number    // Mouse-based distortion
     ) => {
         if (!buffer || buffer.width === 0) return;
         
@@ -125,18 +128,26 @@ const Marquee: React.FC = () => {
             if (sx < 0) sx += totalW;
 
             // 1. Base Wave Motion
+            // Increase amplitude slightly with mouse interaction
+            let waveAmp = baseWaveAmp + (mouseInteraction * 2);
             let distortion = Math.sin((x * waveFreq) + (totalTime * 0.02)) * waveAmp;
             
             // 2. Interactive Lens (Refraction)
             const dx = x - smoothMouse.x;
             const dy = yPos - smoothMouse.y; 
             const dist = Math.sqrt(dx*dx + dy*dy);
-            const lensRadius = 200;
+            
+            // Expand lens radius when hovering/active
+            const lensRadius = 250 + (mouseInteraction * 50);
             
             if (dist < lensRadius) {
                 const force = (lensRadius - dist) / lensRadius;
-                const bulge = Math.pow(force, 2); 
-                distortion -= bulge * 25; 
+                // Sharper curve for glass liquid feel
+                const bulge = Math.pow(force, 1.8); 
+                
+                // Intense distortion reaction to mouse
+                const intensity = 30 + (mouseInteraction * 120);
+                distortion -= bulge * intensity; 
             }
 
             // 3. "Infection" (Vertical Stretch/Glitch)
@@ -163,8 +174,26 @@ const Marquee: React.FC = () => {
         const deltaMultiplier = Math.min(deltaTime, 60) / 16.67;
         totalTime += deltaMultiplier;
 
-        smoothMouse.x += (mouse.x - smoothMouse.x) * 0.1 * deltaMultiplier;
-        smoothMouse.y += (mouse.y - smoothMouse.y) * 0.1 * deltaMultiplier;
+        // Calculate Mouse Dynamics
+        const dx = mouse.x - smoothMouse.x;
+        const dy = mouse.y - smoothMouse.y;
+        const distToTarget = Math.sqrt(dx*dx + dy*dy);
+        
+        // Mouse Velocity (used for intensity)
+        // If mouse is offscreen (-1000), velocity should be 0
+        const currentMouseVel = (mouse.x > -500) ? distToTarget * 0.05 : 0;
+        mouseVelocity += (currentMouseVel - mouseVelocity) * 0.1;
+
+        // Smooth Mouse Follow
+        smoothMouse.x += dx * 0.1 * deltaMultiplier;
+        smoothMouse.y += dy * 0.1 * deltaMultiplier;
+
+        // Hover Strength Transition
+        const targetHover = (mouse.x > -500) ? 1 : 0;
+        hoverStrength += (targetHover - hoverStrength) * 0.05 * deltaMultiplier;
+
+        // Composite Mouse Effect
+        const mouseEffect = hoverStrength * (1 + mouseVelocity * 0.5);
 
         // Track Scroll Velocity
         const scrollY = window.scrollY;
@@ -185,23 +214,27 @@ const Marquee: React.FC = () => {
         const centerY = (canvas.height / dpr) / 2;
 
         // Layer 1: Main Title
+        // High reactivity to mouse
         drawLiquidLine(
             buffer1, 
             centerY - (isMobile ? 15 : 30), 
             -1.2, 
             5,    
             0.004, 
-            laminationIntensity 
+            laminationIntensity,
+            mouseEffect 
         );
 
         // Layer 2: Quote
+        // Subtle reaction to scroll (lamination) and very subtle mouse influence
         drawLiquidLine(
             buffer2, 
             centerY + (isMobile ? 25 : 50), 
             -0.6, 
             3,    
             0.006,
-            laminationIntensity * 0.5 
+            laminationIntensity * 0.8, // Increased from 0.5 for better scroll reaction
+            mouseEffect * 0.3          // Subtle mouse reaction
         );
 
         animationId = requestAnimationFrame(animate);

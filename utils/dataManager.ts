@@ -1,10 +1,11 @@
-import { Project, Experience, Award, TravelLocation } from '../types';
+import { Project, Experience, Award, TravelLocation, Hobby } from '../types';
 
 export interface AppData {
   projects: Project[];
   experience: Experience[];
   awards: Award[];
   travels: TravelLocation[];
+  hobbies: Hobby[];
 }
 
 const DEFAULT_PROJECTS: Project[] = [
@@ -123,6 +124,44 @@ const DEFAULT_TRAVELS: TravelLocation[] = [
   }
 ];
 
+const DEFAULT_HOBBIES: Hobby[] = [
+  {
+    id: 1,
+    name: "Mechanical Keyboards",
+    category: "Tech & Collection",
+    coverImage: "https://images.unsplash.com/photo-1595225476474-87563907a212?q=80&w=1000",
+    description: "Building custom keyboards, lubricating switches, and collecting rare artisan keycaps. It's the perfect blend of engineering and aesthetics.",
+    news: "Just acquired a rare GMK set!",
+    gallery: [
+      "https://images.unsplash.com/photo-1618384887929-16ec33fab9ef?q=80&w=1000",
+      "https://images.unsplash.com/photo-1587829741301-dc798b91add1?q=80&w=1000"
+    ]
+  },
+  {
+    id: 2,
+    name: "Analog Photography",
+    category: "Art",
+    coverImage: "https://images.unsplash.com/photo-1452780212940-6f5c0d14d848?q=80&w=1000",
+    description: "Capturing moments on 35mm film. The delay between shooting and developing teaches patience and intentionality.",
+    news: "Developed 3 rolls from the Tokyo trip.",
+    gallery: [
+      "https://images.unsplash.com/photo-1495121605193-b116b5b9c5fe?q=80&w=1000",
+      "https://images.unsplash.com/photo-1516035069371-29a1b244cc32?q=80&w=1000"
+    ]
+  },
+  {
+    id: 3,
+    name: "Cycling",
+    category: "Sport",
+    coverImage: "https://images.unsplash.com/photo-1541625602330-2277a4c46182?q=80&w=1000",
+    description: "Road cycling on weekends. Chasing horizons and beating personal bests on Strava.",
+    news: "Completed my first 100km ride this month.",
+    gallery: [
+      "https://images.unsplash.com/photo-1517649763962-0c623066013b?q=80&w=1000"
+    ]
+  }
+];
+
 const STORAGE_KEY = 'zu_portfolio_data_v1';
 
 // Default State in Code
@@ -130,7 +169,8 @@ const DEFAULT_DATA: AppData = {
     projects: DEFAULT_PROJECTS,
     experience: DEFAULT_EXPERIENCE,
     awards: DEFAULT_AWARDS,
-    travels: DEFAULT_TRAVELS
+    travels: DEFAULT_TRAVELS,
+    hobbies: DEFAULT_HOBBIES
 };
 
 export const getPortfolioData = (): AppData => {
@@ -140,12 +180,12 @@ export const getPortfolioData = (): AppData => {
       const data = JSON.parse(stored);
       
       // Robust Check: Ensure all sections exist, if not merge with defaults
-      // This helps if we add new sections in code later
       return {
           projects: data.projects || DEFAULT_DATA.projects,
           experience: data.experience || DEFAULT_DATA.experience,
           awards: data.awards || DEFAULT_DATA.awards,
-          travels: data.travels || DEFAULT_DATA.travels
+          travels: data.travels || DEFAULT_DATA.travels,
+          hobbies: data.hobbies || DEFAULT_DATA.hobbies
       };
     }
   } catch (e) {
