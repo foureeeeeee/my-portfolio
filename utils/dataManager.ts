@@ -14,32 +14,62 @@ const DEFAULT_PROJECTS: Project[] = [
     title: "Easy Recycle",
     category: "UI/UX Design",
     year: "2024",
+    client: "GreenTech Solutions",
     description: "A sustainable lifestyle application focusing on recycling habits and community engagement.",
-    image: "https://picsum.photos/1200/800?random=1"
+    longDescription: "Easy Recycle addresses the confusion surrounding waste separation. By utilizing AI-powered image recognition, users can scan items to instantly receive disposal instructions. The app gamifies the experience with a leaderboard and community challenges, resulting in a 40% increase in recycling accuracy among beta testers.",
+    image: "https://images.unsplash.com/photo-1532996122724-e3c354a0b15b?q=80&w=1200",
+    link: "https://example.com",
+    technologies: ["Figma", "React Native", "TensorFlow"],
+    gallery: [
+      "https://images.unsplash.com/photo-1542601906990-b4d3fb778b09?q=80&w=1200",
+      "https://images.unsplash.com/photo-1507208773393-40d9fc9f9777?q=80&w=1200"
+    ]
   },
   {
     id: 2,
     title: "Yongling Band",
     category: "Branding",
     year: "2023",
+    client: "Yongling Cultural Center",
     description: "Cultural heritage brand design for a traditional music ensemble with modern aesthetics.",
-    image: "https://picsum.photos/1200/800?random=2"
+    longDescription: "The challenge was to modernize a 500-year-old musical tradition for a Gen-Z audience without losing its soul. The rebrand included a dynamic logo system based on sound wave visualization of traditional instruments, a website, and merchandise design.",
+    image: "https://images.unsplash.com/photo-1511379938547-c1f69419868d?q=80&w=1200",
+    link: "https://example.com",
+    technologies: ["Illustrator", "After Effects", "Cinema 4D"],
+    gallery: [
+      "https://images.unsplash.com/photo-1514525253440-b393452e8d26?q=80&w=1200",
+      "https://images.unsplash.com/photo-1501612780327-45045538702b?q=80&w=1200"
+    ]
   },
   {
     id: 3,
     title: "Martial Arts",
     category: "Interactive",
     year: "2024",
+    client: "Tencent Games",
     description: "An immersive HTML5 promotional campaign for a mobile game launch.",
-    image: "https://picsum.photos/1200/800?random=3"
+    longDescription: "An interactive web experience allowing users to explore the game's lore through parallax scrolling and WebGL particle effects. Achieved 2M+ unique visitors in the first week of launch.",
+    image: "https://images.unsplash.com/photo-1534438327276-14e5300c3a48?q=80&w=1200",
+    link: "https://example.com",
+    technologies: ["Three.js", "GSAP", "Vue.js"],
+    gallery: [
+      "https://images.unsplash.com/photo-1519074069444-1ba4fff66d16?q=80&w=1200"
+    ]
   },
   {
     id: 4,
     title: "Lugu Sauce",
     category: "Packaging",
     year: "2022",
+    client: "Lugu Farms",
     description: "Premium packaging design for traditional agricultural products.",
-    image: "https://picsum.photos/1200/800?random=4"
+    longDescription: "Packaging design that utilizes biodegradable materials and minimalist typography to convey organic purity. The design won the Silver Award at the National Packaging Competition.",
+    image: "https://images.unsplash.com/photo-1597475149301-21c83d666d6c?q=80&w=1200",
+    link: "",
+    technologies: ["Photoshop", "Blender"],
+    gallery: [
+       "https://images.unsplash.com/photo-1627483297886-49710ae1fc28?q=80&w=1200"
+    ]
   }
 ];
 

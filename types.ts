@@ -5,6 +5,12 @@ export interface Project {
   image: string;
   year: string;
   description: string;
+  // New Fields
+  longDescription?: string;
+  client?: string;
+  link?: string;
+  gallery?: string[]; // Array of image or video URLs
+  technologies?: string[];
 }
 
 export interface Experience {

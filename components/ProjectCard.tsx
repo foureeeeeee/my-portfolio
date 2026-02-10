@@ -1,14 +1,15 @@
 import React from 'react';
 import { motion } from 'framer-motion';
 import { Project } from '../types';
-import { ArrowUpRight } from 'lucide-react';
+import { ArrowUpRight, Eye } from 'lucide-react';
 
 interface ProjectCardProps {
   project: Project;
   index: number;
+  onClick: (project: Project) => void;
 }
 
-const ProjectCard: React.FC<ProjectCardProps> = ({ project, index }) => {
+const ProjectCard: React.FC<ProjectCardProps> = ({ project, index, onClick }) => {
   return (
     <motion.div 
       className="group relative w-full border-t border-white/10 py-16 md:py-24 cursor-pointer"
@@ -16,6 +17,7 @@ const ProjectCard: React.FC<ProjectCardProps> = ({ project, index }) => {
       whileInView={{ opacity: 1, y: 0 }}
       viewport={{ once: true, margin: "-10%" }}
       transition={{ duration: 0.8, delay: index * 0.1, ease: [0.22, 1, 0.36, 1] }}
+      onClick={() => onClick(project)}
     >
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-12 px-4 md:px-0">
         
@@ -30,7 +32,7 @@ const ProjectCard: React.FC<ProjectCardProps> = ({ project, index }) => {
           <h3 className="text-4xl md:text-6xl font-bold mb-6 group-hover:text-transparent group-hover:bg-clip-text group-hover:bg-gradient-to-r group-hover:from-purple-400 group-hover:to-green-400 transition-all duration-500">
             {project.title}
           </h3>
-          <p className="text-gray-400 max-w-sm mb-6 font-light leading-relaxed">{project.description}</p>
+          <p className="text-gray-400 max-w-sm mb-6 font-light leading-relaxed line-clamp-3">{project.description}</p>
           <div className="flex gap-2">
             {['Strategy', 'Design', 'Dev'].map((tag, i) => (
                 <span key={i} className="text-[10px] uppercase tracking-wider border border-white/10 px-3 py-1.5 rounded-full text-gray-500 bg-white/5">{tag}</span>
@@ -54,13 +56,20 @@ const ProjectCard: React.FC<ProjectCardProps> = ({ project, index }) => {
             />
             
             {/* Overlay */}
-            <div className="absolute inset-0 bg-black/40 group-hover:bg-transparent transition-colors duration-500"></div>
+            <div className="absolute inset-0 bg-black/40 group-hover:bg-transparent transition-colors duration-500">
+               <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-500">
+                   <div className="bg-white/10 backdrop-blur-md px-6 py-2 rounded-full border border-white/20 flex items-center gap-2">
+                      <Eye size={16} />
+                      <span className="text-sm font-medium tracking-wide">VIEW CASE</span>
+                   </div>
+               </div>
+            </div>
           </motion.div>
         </div>
 
         {/* Action Button */}
-        <div className="absolute right-8 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 -translate-x-10 group-hover:translate-x-0 transition-all duration-700 ease-[0.22,1,0.36,1] hidden md:block">
-            <div className="w-20 h-20 rounded-full bg-white text-black flex items-center justify-center hover:scale-110 transition-transform duration-300">
+        <div className="absolute right-8 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 -translate-x-10 group-hover:translate-x-0 transition-all duration-700 ease-[0.22,1,0.36,1] hidden md:block pointer-events-none">
+            <div className="w-20 h-20 rounded-full bg-white text-black flex items-center justify-center">
                 <ArrowUpRight size={32} strokeWidth={1.5} />
             </div>
         </div>

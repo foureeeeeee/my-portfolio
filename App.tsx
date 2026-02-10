@@ -5,6 +5,7 @@ import CustomCursor from './components/CustomCursor';
 import Hero from './components/Hero';
 import Marquee from './components/Marquee';
 import ProjectCard from './components/ProjectCard';
+import ProjectDetail from './components/ProjectDetail';
 import NoiseOverlay from './components/NoiseOverlay';
 import ParticleBackground from './components/ParticleBackground'; 
 import AdminPortal from './components/AdminPortal';
@@ -16,12 +17,14 @@ import HobbySection from './components/HobbySection';
 import ExperienceAvatar from './components/ExperienceAvatar';
 import { getPortfolioData, AppData } from './utils/dataManager';
 import { Github, Linkedin, Mail, Twitter, Lock, Globe, Smile } from 'lucide-react';
+import { Project } from './types';
 
 const App: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [portfolioData, setPortfolioData] = useState<AppData | null>(null);
   const [showAdmin, setShowAdmin] = useState(false);
   const [view, setView] = useState<'home' | 'travel' | 'hobby'>('home');
+  const [selectedProject, setSelectedProject] = useState<Project | null>(null);
 
   useEffect(() => {
     // Load data on mount
@@ -57,6 +60,16 @@ const App: React.FC = () => {
             onClose={() => setShowAdmin(false)} 
             data={portfolioData} 
             onUpdate={handleDataUpdate}
+          />
+        )}
+      </AnimatePresence>
+      
+      {/* Project Detail Overlay */}
+      <AnimatePresence>
+        {selectedProject && (
+          <ProjectDetail 
+            project={selectedProject} 
+            onClose={() => setSelectedProject(null)} 
           />
         )}
       </AnimatePresence>
@@ -138,7 +151,12 @@ const App: React.FC = () => {
               
               <div className="flex flex-col gap-12">
                 {portfolioData.projects.map((project, index) => (
-                  <ProjectCard key={project.id} project={project} index={index} />
+                  <ProjectCard 
+                    key={project.id} 
+                    project={project} 
+                    index={index} 
+                    onClick={(p) => setSelectedProject(p)}
+                  />
                 ))}
               </div>
             </section>
