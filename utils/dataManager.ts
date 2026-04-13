@@ -31,7 +31,7 @@ const DEFAULT_PROJECTS: Project[] = [
     "description": "Demure design deliver to  a e business logistic website, ensemble with modern aesthetics.",
     "image": "https://github.com/foureeeeeee/picutestorage/blob/main/Screenshot%202026-02-10%20at%2020.08.42.png?raw=true",
     "client": "wordpress(cloudflare)",
-    "link": "https://www.quanmerch3.win/shop/",
+    "link": "https://e-commercewordpress.netlify.app",
     "longDescription": "QUAN Merch is a campus-focused delivery platform designed to move documents and parcels efficiently, securely, and transparently across university environments.\n\n\n",
     "gallery": [
       "https://github.com/foureeeeeee/picutestorage/blob/main/Screenshot%202026-02-10%20at%2020.09.36.png?raw=true"
@@ -60,7 +60,7 @@ const DEFAULT_PROJECTS: Project[] = [
     "description": "know your professor in advance.",
     "image": "https://github.com/foureeeeeee/picutestorage/blob/main/Screenshot%202026-02-10%20at%2020.30.58.png?raw=true",
     "client": "Google",
-    "link": "https://ai.studio/apps/drive/1ASvjHOEC3r_PrBuuKaSxPMW-FZc0Aoct?fullscreenApplet=true",
+    "link": "https://ratemypro.netlify.app",
     "longDescription": "The Rate My Professor System is a web-based platform designed to help students share and access feedback about university instructors. The system allows students to rate professors based on various criteria such as teaching effectiveness, clarity of explanation, course difficulty, responsiveness, and overall satisfaction. Users can also write detailed reviews describing their learning experiences, strengths of the instructor, and suggestions for improvement.\n",
     "gallery": [
       "https://github.com/foureeeeeee/picutestorage/blob/main/Screenshot%202026-02-10%20at%2020.31.26.png?raw=true",
@@ -430,3 +430,4 @@ export const resetPortfolioData = () => {
     return DEFAULT_DATA;
   }
 };
+
